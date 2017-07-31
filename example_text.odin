@@ -2,9 +2,9 @@ import (
     "fmt.odin";
     "strings.odin";
     "math.odin";
-    "glfw.odin";
-    "gl.odin";
-    "font.odin";
+    "external/odin-glfw/glfw.odin";
+    "external/odin-gl/gl.odin";
+    "external/odin-gl_font/font.odin";
 )
 
 main :: proc() {
@@ -23,7 +23,8 @@ main :: proc() {
 
     gl.ClearColor(1.0, 1.0, 1.0, 1.0);
 
-    if !font.init("extra/font_3x1.bin", "shaders/shader_font.vs", "shaders/shader_font.fs") do return;
+    if !font.init("extra/font_3x1.bin", "shaders/shader_font.vs", "shaders/shader_font.fs", set_proc_address) do return;  
+    
     defer font.cleanup();
 
     for glfw.WindowShouldClose(window) == glfw.FALSE {
