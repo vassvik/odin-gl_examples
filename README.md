@@ -13,22 +13,30 @@ Currently contains:
 
 Single triangle
 
+![triangle](http://i.imgur.com/CdPfTJ7.png)
+
 
 ### example_shaderboy
 
-Screen-covering quad, copy of a shadertoy. 
+Screen-covering quad, and a copy of a [shadertoy](https://www.shadertoy.com/view/4sXyDr).
 There is also a bufferless example
+
+![shadertoy](http://i.imgur.com/y4MvVS1.jpg)
 
 
 ### example_hex
 
 Draws tiled hexagons, no buffers.
 
+![hex](http://i.imgur.com/leT6dBq.png)
+
 
 ### example_text
 
-Simple font rendering, using bufferless quads and instancing.
+Simple bitmap font rendering, using bufferless quads and instancing.
 Uses a binary file format. See `external/gl_font/font.odin` for details.
+
+![text](http://i.imgur.com/nTv85xc.png)
 
 
 ### example_render_to_texture
@@ -40,3 +48,5 @@ Work in progress..
 ### example_solids
 
 Renders sphere approximations by subdividing platonic solids
+
+![spheres](http://i.imgur.com/xke0Dcq.png)
