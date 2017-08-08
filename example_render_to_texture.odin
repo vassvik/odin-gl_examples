@@ -51,6 +51,16 @@ main :: proc() {
     gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, i32(resx), i32(resy), 0, gl.RGBA, gl.UNSIGNED_BYTE, nil);
 
 
+    screen_texture2: u32;
+    gl.GenTextures(1, &screen_texture2);
+    gl.BindTexture(gl.TEXTURE_2D, screen_texture2);
+
+    gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+    gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, i32(resx), i32(resy), 0, gl.RGBA, gl.UNSIGNED_BYTE, nil);
+
+
     pick_texture: u32;
     gl.GenTextures(1, &pick_texture);
     gl.BindTexture(gl.TEXTURE_2D, pick_texture);
@@ -79,8 +89,27 @@ main :: proc() {
     */
     if gl.CheckFramebufferStatus(gl.FRAMEBUFFER) != gl.FRAMEBUFFER_COMPLETE do fmt.printf("Error setting up framebuffer\n");
 
-    gl.BindFramebuffer(gl.FRAMEBUFFER, 0);
 
+    fbo2: u32;
+    gl.GenFramebuffers(1, &fbo2);
+    gl.BindFramebuffer(gl.FRAMEBUFFER, fbo2);
+    gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, screen_texture2, 0);
+    gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, pick_texture, 0);
+
+    buffers2 := [...]u32{ gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1 };
+    gl.DrawBuffers(2, &buffers2[0]);
+
+    /*
+    depthrenderbuffer: u32;
+    gl.GenRenderbuffers(1, &depthrenderbuffer);
+    gl.BindRenderbuffer(gl.RENDERBUFFER, depthrenderbuffer);
+    gl.RenderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT, i32(resx), i32(resy));
+    gl.FramebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depthrenderbuffer);
+    */
+    if gl.CheckFramebufferStatus(gl.FRAMEBUFFER) != gl.FRAMEBUFFER_COMPLETE do fmt.printf("Error setting up framebuffer\n");
+
+
+    gl.BindFramebuffer(gl.FRAMEBUFFER, 0);
 
 
     get_uniform_location :: proc(program: u32, str: string) -> i32 {
@@ -96,16 +125,24 @@ main :: proc() {
         gl.UseProgram(program);
         gl.BindVertexArray(vao);
         gl.ActiveTexture(gl.TEXTURE0);
-        gl.BindTexture(gl.TEXTURE_2D, screen_texture);
 
+        // render to texture
         gl.BindFramebuffer(gl.FRAMEBUFFER, fbo);
         gl.Clear(gl.COLOR_BUFFER_BIT);
         gl.Uniform1i(get_uniform_location(program, "mode\x00"), 0);
         gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, 9);
 
+        // display texture and optionally do some post-processing
+        gl.BindFramebuffer(gl.FRAMEBUFFER, fbo2 );
+        gl.Clear(gl.COLOR_BUFFER_BIT);
+        gl.BindTexture(gl.TEXTURE_2D, screen_texture);
+        gl.Uniform1i(get_uniform_location(program, "mode\x00"), 1);
+        gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, 9);
+
         gl.BindFramebuffer(gl.FRAMEBUFFER, 0 );
         gl.Clear(gl.COLOR_BUFFER_BIT);
-        gl.Uniform1i(get_uniform_location(program, "mode\x00"), 1);
+        gl.BindTexture(gl.TEXTURE_2D, screen_texture2);
+        gl.Uniform1i(get_uniform_location(program, "mode\x00"), 2);
         gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, 9);
 
         glfw.SwapBuffers(window);

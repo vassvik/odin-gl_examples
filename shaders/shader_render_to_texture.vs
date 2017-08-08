@@ -4,6 +4,8 @@ out vec3 fragment_position;
 
 uniform int mode;
 
+flat out int instance_ID;
+
 void main() {
 	int x = (gl_VertexID / 2) + (gl_InstanceID%3);
 	int y = (gl_VertexID % 2) + (gl_InstanceID/3);
@@ -17,4 +19,5 @@ void main() {
 		gl_Position = vec4((2.0*p - 1.0), 0.0, 1.0);
 	}
     fragment_position = vec3(p, 0.0);
+    instance_ID = gl_InstanceID;
 }

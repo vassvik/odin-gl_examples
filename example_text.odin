@@ -35,7 +35,7 @@ main :: proc() {
         gl.Clear(gl.COLOR_BUFFER_BIT);
                 
         seed = 123;
-        for i in 0..int(3.0*glfw.GetTime()) do rng();
+        for i in 0..int(3.0*glfw.GetTime())%90 do rng();
 
         colors_font := font.get_colors();
         for i in 0..4 do colors_font[i] = font.Vec4{f32(rng()), f32(rng()), f32(rng()), 1.0};
@@ -70,7 +70,6 @@ init_glfw :: proc(resx, resy: i32, title: string) -> (^glfw.window, bool) {
         return nil, false;
     }
 
-    glfw.WindowHint(glfw.SAMPLES, 0);
     glfw.WindowHint(glfw.CONTEXT_VERSION_MAJOR, 4);
     glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, 5);
     glfw.WindowHint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE);
@@ -85,13 +84,6 @@ init_glfw :: proc(resx, resy: i32, title: string) -> (^glfw.window, bool) {
 
     return window, true;
 }
-
-// wrapper to use GetUniformLocation with an Odin string
-// @NOTE: str has to be zero-terminated, so add a \x00 at the end
-GetUniformLocation_ :: proc(program: u32, str: string) -> i32 {
-    return gl.GetUniformLocation(program, &str[0]);;
-}
-
 
 // Minimal Standard LCG
 seed : u32 = 12345;

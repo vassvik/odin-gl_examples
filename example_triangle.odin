@@ -74,7 +74,7 @@ main :: proc() {
 
         // setup shader program and uniforms
         gl.UseProgram(program);
-        gl.Uniform1f(GetUniformLocation_(program, "time\x00"), f32(glfw.GetTime()));
+        gl.Uniform1f(get_uniform_location(program, "time\x00"), f32(glfw.GetTime()));
         
         // draw stuff
         gl.BindVertexArray(vao);
@@ -86,6 +86,6 @@ main :: proc() {
 
 // wrapper to use GetUniformLocation with an Odin string
 // NOTE: str has to be zero-terminated, so add a \x00 at the end
-GetUniformLocation_ :: proc(program: u32, str: string) -> i32 {
+get_uniform_location :: proc(program: u32, str: string) -> i32 {
     return gl.GetUniformLocation(program, &str[0]);;
 }
