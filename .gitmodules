@@ -1,9 +1,0 @@
-[submodule "external/odin-glfw"]
-	path = external/odin-glfw
-	url = https://github.com/vassvik/odin-glfw
-[submodule "external/odin-gl"]
-	path = external/odin-gl
-	url = https://github.com/vassvik/odin-gl
-[submodule "external/odin-gl_font"]
-	path = external/odin-gl_font
-	url = https://github.com/vassvik/odin-gl_font
