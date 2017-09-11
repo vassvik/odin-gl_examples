@@ -32,6 +32,7 @@ void main() {
 		s = !(s == 3 || s == 5 || s == 7) ? 0 : 1;
 
 		color = vec4(s, s, s, 1.0);
+		color = middle;
 	} else {
 		ivec2 res = textureSize(tex, 0);
 
