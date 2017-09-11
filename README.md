@@ -39,7 +39,7 @@ Draws tiled hexagons, no buffers.
 ### example_text
 
 Simple bitmap font rendering, using bufferless quads and instancing.
-Uses a binary file format. See `external/gl_font/font.odin` for details.
+Uses a binary file format. See `shared/gl_font/font.odin` for details.
 
 ![text](http://i.imgur.com/nTv85xc.png)
 
