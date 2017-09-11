@@ -10,6 +10,7 @@ float distanceBezier(vec2 p, vec2 P0, vec2 P1, vec2 P2, vec2 P3);
 
 void main() {
 	mainImage(color, gl_FragCoord.xy);
+	color = vec4(1.0, 0.8, 0.6, 1.0);
 }
 
 // copy of https://www.shadertoy.com/view/4sXyDr, 

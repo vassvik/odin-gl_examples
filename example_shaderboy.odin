@@ -45,10 +45,10 @@ main :: proc() {
 
     // setup vbo
     vertex_data := [...]f32{
-        -1.0, -1.0,  0.0,
-         1.0, -1.0,  0.0,
-        -1.0,  1.0,  0.0,
-         1.0,  1.0,  0.0,
+        -1.0, -1.0,
+         1.0, -1.0,
+        -1.0,  1.0,
+         1.0,  1.0,
     };
 
     vbo: u32;
@@ -59,7 +59,7 @@ main :: proc() {
     gl.BufferData(gl.ARRAY_BUFFER, size_of(vertex_data), &vertex_data[0], gl.STATIC_DRAW);
 
     gl.EnableVertexAttribArray(0);
-    gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 0, nil);
+    gl.VertexAttribPointer(0, 2, gl.FLOAT, gl.FALSE, 0, nil);
     
     // main loop
     gl.ClearColor(1.0, 1.0, 1.0, 1.0);

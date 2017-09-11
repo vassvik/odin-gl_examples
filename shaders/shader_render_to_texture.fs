@@ -4,71 +4,52 @@ in vec3 fragment_position;
 flat in int instance_ID;
 
 uniform int mode;
-uniform sampler2D renderedTexture;
+uniform sampler2D tex;
 
 layout(location = 0) out vec4 color;
 layout(location = 1) out vec4 blah;
 
+float t = 1.0;
+
+
 void main() {
+	vec2 p = fragment_position.xy;
 	if (mode == 0) {
 		float R = 0.5 + 0.5*cos(2.0*instance_ID + 3.7*gl_PrimitiveID);
-		float G = 0.5 - 0.5*cos(3.0*instance_ID + 3.7*gl_PrimitiveID);
-		float B = 0.5 + 0.5*cos(5.0*instance_ID + 3.7*gl_PrimitiveID);
+		float G = 0.5 - 0.5*cos(3.0*instance_ID + 2.0*3.7*gl_PrimitiveID);
+		float B = 0.5 + 0.5*cos(5.0*instance_ID + 3.0*3.7*gl_PrimitiveID);
 	    color = vec4(R, G, B, 1.0);
 	} else if (mode == 1) {
-		ivec2 texture_size = textureSize(renderedTexture, 0);
+		ivec2 res = textureSize(tex, 0);
+		ivec2 p = ivec2(fragment_position.xy*res/* + 0.5*/);
 
-		float thickness = 1.0;
+		vec4 middle   = texelFetch(tex, p + ivec2(0, 0), 0);
+		int top       = texelFetch(tex, p + ivec2(0, 1), 0) == middle ? 1 : 0;
+		int right     = texelFetch(tex, p + ivec2(1, 0), 0) == middle ? 1 : 0;
+		int top_right = texelFetch(tex, p + ivec2(1, 1), 0) == middle ? 1 : 0;
 
-		vec4 middle        = texture(renderedTexture, fragment_position.xy);
+		int s = right*1 + top_right*2 + top*4;
+		s = !(s == 3 || s == 5 || s == 7) ? 0 : 1;
 
-		float top_left      = texture(renderedTexture, fragment_position.xy + thickness*vec2(-1.0, +1.0)/texture_size) == middle ? 0 : 1;
-		float top           = texture(renderedTexture, fragment_position.xy + thickness*vec2( 0.0, +1.0)/texture_size) == middle ? 0 : 1;
-		float top_right     = texture(renderedTexture, fragment_position.xy + thickness*vec2(+1.0, +1.0)/texture_size) == middle ? 0 : 1;
-		float left          = texture(renderedTexture, fragment_position.xy + thickness*vec2(-1.0,  0.0)/texture_size) == middle ? 0 : 1;
-		float right         = texture(renderedTexture, fragment_position.xy + thickness*vec2(+1.0,  0.0)/texture_size) == middle ? 0 : 1;
-		float bottom_left   = texture(renderedTexture, fragment_position.xy + thickness*vec2(-1.0, -1.0)/texture_size) == middle ? 0 : 1;
-		float bottom        = texture(renderedTexture, fragment_position.xy + thickness*vec2( 0.0, -1.0)/texture_size) == middle ? 0 : 1;
-		float bottom_right  = texture(renderedTexture, fragment_position.xy + thickness*vec2(+1.0, -1.0)/texture_size) == middle ? 0 : 1;
-		float up_up         = texture(renderedTexture, fragment_position.xy + thickness*vec2( 0.0, -2.0)/texture_size) == middle ? 0 : 1;
-		float left_left     = texture(renderedTexture, fragment_position.xy + thickness*vec2(-2.0,  0.0)/texture_size) == middle ? 0 : 1;
-		float right_right   = texture(renderedTexture, fragment_position.xy + thickness*vec2(+2.0,  0.0)/texture_size) == middle ? 0 : 1;
-		float bottom_bottom = texture(renderedTexture, fragment_position.xy + thickness*vec2( 0.0, -2.0)/texture_size) == middle ? 0 : 1;
-
-		float sx = 2.0*(right - left) + (bottom_right - bottom_left) + (top_right - top_left);
-		float sy = 2.0*(top - bottom) + (top_right - bottom_right)   + (top_left - bottom_left);
-
-		float s1 = clamp(sqrt(sx*sx + sy*sy)/5.0, 0.0, 1.0);
-		float s2 = clamp((2.0*(left+top+right+bottom)+2.0*(top_left+top_right+bottom_left+bottom_right) + 4.0*(up_up+left_left+bottom_bottom+right_right))/12.0, 0.0, 1.0);
-		
-		float s = smoothstep(0.0, 1.0, s2);
-
-		s = left+top+right+bottom; 
-		//s = left+top+right+bottom+top_left+top_right+bottom_left+bottom_right;
-		s = s > 0.0 ? 1.0 : 0.0;
-
-		color = vec4(0.0, 0.0, 0.0, 1.0)*s + middle*(1.0 - s);
-		//color = middle;
-		//color = vec4(0.5 + 0.5*sx, 0.5 + 0.5*sy, 0.0, 1.0);
 		color = vec4(s, s, s, 1.0);
 	} else {
-		ivec2 texture_size = textureSize(renderedTexture, 0);
+		ivec2 res = textureSize(tex, 0);
 
-		float thickness = 1.0;
+		float t = 1.0;
 
-		float middle        = texture(renderedTexture, fragment_position.xy).x;
-		float top_left      = texture(renderedTexture, fragment_position.xy + thickness*vec2(-1.0, +1.0)/texture_size).x;
-		float top           = texture(renderedTexture, fragment_position.xy + thickness*vec2( 0.0, +1.0)/texture_size).x;
-		float top_right     = texture(renderedTexture, fragment_position.xy + thickness*vec2(+1.0, +1.0)/texture_size).x;
-		float left          = texture(renderedTexture, fragment_position.xy + thickness*vec2(-1.0,  0.0)/texture_size).x;
-		float right         = texture(renderedTexture, fragment_position.xy + thickness*vec2(+1.0,  0.0)/texture_size).x;
-		float bottom_left   = texture(renderedTexture, fragment_position.xy + thickness*vec2(-1.0, -1.0)/texture_size).x;
-		float bottom        = texture(renderedTexture, fragment_position.xy + thickness*vec2( 0.0, -1.0)/texture_size).x;
-		float bottom_right  = texture(renderedTexture, fragment_position.xy + thickness*vec2(+1.0, -1.0)/texture_size).x;
-		float up_up         = texture(renderedTexture, fragment_position.xy + thickness*vec2( 0.0, -2.0)/texture_size).x;
-		float left_left     = texture(renderedTexture, fragment_position.xy + thickness*vec2(-2.0,  0.0)/texture_size).x;
-		float right_right   = texture(renderedTexture, fragment_position.xy + thickness*vec2(+2.0,  0.0)/texture_size).x;
-		float bottom_bottom = texture(renderedTexture, fragment_position.xy + thickness*vec2( 0.0, -2.0)/texture_size).x;
+		float middle        = texture(tex, p.xy).x;
+		float top_left      = texture(tex, p.xy + t*vec2(-1.0, +1.0)/res).x;
+		float top           = texture(tex, p.xy + t*vec2( 0.0, +1.0)/res).x;
+		float top_right     = texture(tex, p.xy + t*vec2(+1.0, +1.0)/res).x;
+		float left          = texture(tex, p.xy + t*vec2(-1.0,  0.0)/res).x;
+		float right         = texture(tex, p.xy + t*vec2(+1.0,  0.0)/res).x;
+		float bottom_left   = texture(tex, p.xy + t*vec2(-1.0, -1.0)/res).x;
+		float bottom        = texture(tex, p.xy + t*vec2( 0.0, -1.0)/res).x;
+		float bottom_right  = texture(tex, p.xy + t*vec2(+1.0, -1.0)/res).x;
+		float up_up         = texture(tex, p.xy + t*vec2( 0.0, -2.0)/res).x;
+		float left_left     = texture(tex, p.xy + t*vec2(-2.0,  0.0)/res).x;
+		float right_right   = texture(tex, p.xy + t*vec2(+2.0,  0.0)/res).x;
+		float bottom_bottom = texture(tex, p.xy + t*vec2( 0.0, -2.0)/res).x;
 		//color = vec4(1.0 - middle.xyz, 1.0);
 		color = vec4(vec3(4.0*middle + left + right + top + bottom)/8.0, 1.0);
 	}

@@ -1,9 +1,8 @@
-import (
-    "fmt.odin";
-    "strings.odin";
-    "external/odin-glfw/glfw.odin";
-    "external/odin-gl/gl.odin";
-)
+import    "fmt.odin";
+import    "strings.odin";
+import    "external/odin-glfw/glfw.odin";
+import    "external/odin-gl/gl.odin";
+
 
 main :: proc() {
     // setup glfw
@@ -61,7 +60,7 @@ main :: proc() {
         
         // draw stuff
         gl.BindVertexArray(vao);
-        gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, 1);
+        gl.DrawArrays(gl.TRIANGLE_STRIP, 0, 4);
         
         glfw.SwapBuffers(window);
     }

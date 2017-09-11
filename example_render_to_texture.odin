@@ -1,9 +1,10 @@
-import (
-    "fmt.odin";
-    "strings.odin";
-    "external/odin-glfw/glfw.odin";
-    "external/odin-gl/gl.odin";
-)
+
+import    "fmt.odin";
+import    "strings.odin";
+import    "os.odin";
+import    "external/odin-glfw/glfw.odin";
+import    "external/odin-gl/gl.odin";
+
 
 main :: proc() {
     error_callback :: proc(error: i32, desc: ^u8) #cc_c {
@@ -23,7 +24,7 @@ main :: proc() {
     if window == nil do return;
 
     glfw.MakeContextCurrent(window);
-    glfw.SwapInterval(0);
+    glfw.SwapInterval(1);
 
 
     set_proc_address :: proc(p: rawptr, name: string) { 
@@ -48,7 +49,7 @@ main :: proc() {
     gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 
-    gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, i32(resx), i32(resy), 0, gl.RGBA, gl.UNSIGNED_BYTE, nil);
+    gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, i32(resx), i32(resy), 0, gl.RGBA, gl.UNSIGNED_BYTE, nil);
 
 
     screen_texture2: u32;
@@ -58,7 +59,7 @@ main :: proc() {
     gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 
-    gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, i32(resx), i32(resy), 0, gl.RGBA, gl.UNSIGNED_BYTE, nil);
+    gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, i32(resx), i32(resy), 0, gl.RGBA, gl.UNSIGNED_BYTE, nil);
 
 
     pick_texture: u32;
@@ -115,12 +116,34 @@ main :: proc() {
     get_uniform_location :: proc(program: u32, str: string) -> i32 {
         return gl.GetUniformLocation(program, &str[0]);;
     }
-
+    when ODIN_OS == "windows" {
+        last_vertex_time := os.last_write_time_by_name("shaders/shader_render_to_texture.vs");
+        last_fragment_time := os.last_write_time_by_name("shaders/shader_render_to_texture.fs");
+    }
     gl.ClearColor(1.0, 1.0, 1.0, 1.0);
     for glfw.WindowShouldClose(window) == glfw.FALSE {
         glfw.calculate_frame_timings(window);
 
         glfw.PollEvents();
+
+        when ODIN_OS == "windows" {
+            current_vertex_time := os.last_write_time_by_name("shaders/shader_render_to_texture.vs");
+            current_fragment_time := os.last_write_time_by_name("shaders/shader_render_to_texture.fs");
+
+            if (current_vertex_time != last_vertex_time || current_fragment_time != last_fragment_time) {
+                new_program, success := gl.load_shaders("shaders/shader_render_to_texture.vs", "shaders/shader_render_to_texture.fs");
+                if success {
+                    gl.DeleteProgram(program);
+                    program = new_program;
+                    fmt.println("Updated shaders");
+                } else {
+                    fmt.println("Failed to update shaders");
+                }
+            }
+
+            last_vertex_time = current_vertex_time;
+            last_fragment_time = current_fragment_time;
+        }
 
         gl.UseProgram(program);
         gl.BindVertexArray(vao);
@@ -129,22 +152,25 @@ main :: proc() {
         // render to texture
         gl.BindFramebuffer(gl.FRAMEBUFFER, fbo);
         gl.Clear(gl.COLOR_BUFFER_BIT);
+
         gl.Uniform1i(get_uniform_location(program, "mode\x00"), 0);
         gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, 9);
 
         // display texture and optionally do some post-processing
+        /*
         gl.BindFramebuffer(gl.FRAMEBUFFER, fbo2 );
         gl.Clear(gl.COLOR_BUFFER_BIT);
         gl.BindTexture(gl.TEXTURE_2D, screen_texture);
         gl.Uniform1i(get_uniform_location(program, "mode\x00"), 1);
         gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, 9);
+        */
 
         gl.BindFramebuffer(gl.FRAMEBUFFER, 0 );
         gl.Clear(gl.COLOR_BUFFER_BIT);
-        gl.BindTexture(gl.TEXTURE_2D, screen_texture2);
-        gl.Uniform1i(get_uniform_location(program, "mode\x00"), 2);
-        gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, 9);
-
+        gl.BindTexture(gl.TEXTURE_2D, screen_texture);
+        gl.Uniform1i(get_uniform_location(program, "mode\x00"), 1);
+        gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, 1);
+        
         glfw.SwapBuffers(window);
     }
 }

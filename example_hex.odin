@@ -5,7 +5,11 @@ import (
     "external/odin-gl/gl.odin";
 )
 
+a: int = b;
+b: int = a;
+
 main :: proc() {
+    fmt.println(a,b);
     // setup glfw
     error_callback :: proc(error: i32, desc: ^u8) #cc_c {
         fmt.printf("Error code %d:\n    %s\n", error, strings.to_odin_string(desc));

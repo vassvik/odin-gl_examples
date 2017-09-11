@@ -1,11 +1,10 @@
-import (
-    "fmt.odin";
-    "strings.odin";
-    "math.odin";
-    "external/odin-glfw/glfw.odin";
-    "external/odin-gl/gl.odin";
-    "external/odin-gl_font/font.odin";
-)
+
+import    "core:fmt.odin";
+import    "core:strings.odin";
+import    "core:math.odin";
+import    "external/odin-glfw/glfw.odin";
+import    "external/odin-gl/gl.odin";
+import    "external/odin-gl_font/font.odin";
 
 // from www.paulbourke.net/geometry/platonic/
 at :: 0.5;
@@ -87,6 +86,7 @@ Vec3 :: struct #ordered {
 
 Vertex :: struct #ordered {
     position, normal: Vec3;
+    area: f32;
 };
 
 Model :: struct {
@@ -100,6 +100,8 @@ Model :: struct {
 
     vao: u32;
     vbo: u32;
+
+    min_area, max_area : f32 = 1.0e9, -1.0e9;
 };
 
 model_get_base_name :: proc(vertices_per_face, num_platonic_faces: int) -> string {
@@ -131,12 +133,15 @@ model_init_and_upload :: proc(using model: ^Model) {
 
     gl.EnableVertexArrayAttrib(vao, 0);
     gl.EnableVertexArrayAttrib(vao, 1);
+    gl.EnableVertexArrayAttrib(vao, 2);
     
     gl.VertexArrayAttribFormat(vao, 0, 3, gl.FLOAT, gl.FALSE, 0);
     gl.VertexArrayAttribFormat(vao, 1, 3, gl.FLOAT, gl.FALSE, 12);
+    gl.VertexArrayAttribFormat(vao, 2, 1, gl.FLOAT, gl.FALSE, 24);
 
     gl.VertexArrayAttribBinding(vao, 0, 0);
     gl.VertexArrayAttribBinding(vao, 1, 0);
+    gl.VertexArrayAttribBinding(vao, 2, 0);
 }
 
 normal_from_vertices :: proc(v: []Vec3) -> Vec3 {
@@ -212,10 +217,41 @@ subdivide_model :: proc(model_in: Model) -> Model {
         normal := normal_from_vertices(vertices[3*i..3*i+3]);
         for j in 0..3 do vertices[3*i+j].normal = normal;
     }
+    acos :: proc(x: f32) -> f32 {
+       return (-0.69813170079773212 * x * x - 0.87266462599716477) * x + 1.5707963267948966;
+    }
 
+    for i in 0..num_triangles {
+        v1 := vertices[3*i + 0].position;
+        v2 := vertices[3*i + 1].position;
+        v3 := vertices[3*i + 2].position;
+
+        a := math.mag(math.Vec3{v2.x - v1.x, v2.y - v1.y, v2.z - v1.z});
+        b := math.mag(math.Vec3{v3.x - v1.x, v3.y - v1.y, v3.z - v1.z});
+        c := math.mag(math.Vec3{v2.x - v3.x, v2.y - v3.y, v2.z - v3.z});
+
+        u1 := math.Vec3{v2.x - v1.x, v2.y - v1.y, v2.z - v1.z};
+        u2 := math.Vec3{v3.x - v1.x, v3.y - v1.y, v3.z - v1.z};
+        u3 := math.Vec3{v2.x - v3.x, v2.y - v3.y, v2.z - v3.z};
+
+        s := (a+b+c)/2.0;
+        T := math.sqrt(s*(s-a)*(s-b)*(s-c));
+        a1 := acos(math.dot(math.Vec3{v2.x - v1.x, v2.y - v1.y, v2.z - v1.z}, math.Vec3{v3.x - v1.x, v3.y - v1.y, v3.z - v1.z}) / (a*b))*180.0/3.1416;
+        a2 := acos(math.dot(math.Vec3{v1.x - v2.x, v1.y - v2.y, v1.z - v2.z}, math.Vec3{v3.x - v2.x, v3.y - v2.y, v3.z - v2.z}) / (a*c))*180.0/3.1416;
+        a3 := acos(math.dot(math.Vec3{v1.x - v3.x, v1.y - v3.y, v1.z - v3.z}, math.Vec3{v2.x - v3.x, v2.y - v3.y, v2.z - v3.z}) / (b*c))*180.0/3.1416;
+        mina := min(min(a1,a2), a3);
+        T = mina;
+        //fmt.println(a1,a2,a3);
+        model_out.min_area = min(model_out.min_area, T);
+        model_out.max_area = max(model_out.max_area, T);
+
+        vertices[3*i + 0].area = T;
+        vertices[3*i + 1].area = T;
+        vertices[3*i + 2].area = T;
+    }
     model_init_and_upload(&model_out);
 
-    fmt.println("Subdivided model:", base_name, subdivision, num_triangles);
+    fmt.printf("Subdivided model: %s %d %d %.8f %.8f\n", base_name, subdivision, num_triangles, model_out.min_area, model_out.max_area);
     
     return model_out;
 }
@@ -272,6 +308,7 @@ subdivide_base_model_platonic :: proc(verts: []Vec3, vertices_per_face: int) -> 
                 vertices[ctr+3*j+0].position = v1;
                 vertices[ctr+3*j+1].position = v2;
                 vertices[ctr+3*j+2].position = vm;
+
             }
             ctr += vertices_per_face*3;
         }
@@ -284,6 +321,23 @@ subdivide_base_model_platonic :: proc(verts: []Vec3, vertices_per_face: int) -> 
     for i in 0..num_triangles {
         normal := normal_from_vertices(vertices[3*i..3*i+3]);
         for j in 0..3 do vertices[3*i + j].normal = normal;
+
+        v1 := vertices[3*i + 0].position;
+        v2 := vertices[3*i + 1].position;
+        v3 := vertices[3*i + 2].position;
+
+        a := math.mag(math.Vec3{v2.x - v1.x, v2.y - v1.y, v2.z - v1.z});
+        b := math.mag(math.Vec3{v3.x - v1.x, v3.y - v1.y, v3.z - v1.z});
+        c := math.mag(math.Vec3{v2.x - v3.x, v2.y - v3.y, v2.z - v3.z});
+        s := (a+b+c)/2.0;
+        T := math.sqrt(s*(s-a)*(s-b)*(s-c));
+       
+        model.min_area = min(model.min_area, T);
+        model.max_area = max(model.max_area, T);
+
+        vertices[3*i + 0].area = T;
+        vertices[3*i + 1].area = T;
+        vertices[3*i + 2].area = T;
     }
 
     model_init_and_upload(&model);
@@ -328,6 +382,25 @@ create_base_model_platonic :: proc(verts: []Vec3, vertices_per_face: int) -> Mod
     // make sure that the vertices are on the unit sphere
     for i in 0..num_vertices do vertices[i].position = normalize(vertices[i].position);
     
+    for i in 0..num_triangles {
+        v1 := vertices[3*i + 0].position;
+        v2 := vertices[3*i + 1].position;
+        v3 := vertices[3*i + 2].position;
+
+        a := math.mag(math.Vec3{v2.x - v1.x, v2.y - v1.y, v2.z - v1.z});
+        b := math.mag(math.Vec3{v3.x - v1.x, v3.y - v1.y, v3.z - v1.z});
+        c := math.mag(math.Vec3{v2.x - v3.x, v2.y - v3.y, v2.z - v3.z});
+        s := (a+b+c)/2.0;
+        T := math.sqrt(s*(s-a)*(s-b)*(s-c));
+       
+        model.min_area = min(model.min_area, T);
+        model.max_area = max(model.max_area, T);
+
+        vertices[3*i + 0].area = T;
+        vertices[3*i + 1].area = T;
+        vertices[3*i + 2].area = T;
+    }
+
     // initialize vao and vbo, and upload the vertex data
     model_init_and_upload(&model);
     
@@ -419,6 +492,8 @@ main :: proc() {
 
 
     gl.Enable(gl.DEPTH_TEST);
+    //gl.Enable(gl.BLEND);
+    //gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
     for glfw.WindowShouldClose(window) == glfw.FALSE {
         glfw.calculate_frame_timings(window);
@@ -456,6 +531,9 @@ main :: proc() {
         if glfw.GetKey(window, glfw.KEY_LEFT_CONTROL) == glfw.PRESS {
             dt *= 10.0;
         }
+        if glfw.GetKey(window, glfw.KEY_LEFT_SHIFT) == glfw.PRESS {
+            dt /= 10.0;
+        }
 
         // update camera position:
         // W: forward, S: back, A: left, D: right, E: up, Q: down
@@ -469,15 +547,28 @@ main :: proc() {
         gl.UseProgram(program);
         gl.Uniform1f(get_uniform_location(program, "time\x00"), f32(glfw.GetTime()));
         gl.Uniform3f(get_uniform_location(program, "camera_pos\x00"), f32(p.x), f32(p.y), f32(p.z));
+        gl.Uniform2f(get_uniform_location(program, "resolution\x00"), f32(resx), f32(resy));
 
         V := view(r, u, f, p);
-        P := math.perspective(3.1415926*45.0/180.0, 1280/720.0, 0.001, 100.0);
+        near : f32 = 0.001;
+        far : f32 = 100.0;
+        P := math.perspective(3.1415926*45.0/180.0, 1280/720.0, near, far);
 
+        seed = 12345;
+        gl.PolygonMode(  gl.FRONT_AND_BACK, gl.FILL);
+        gl.Uniform1i(get_uniform_location(program, "draw_mode\x00"), 0);
+        gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), 0);
+        //gl.DepthRange(0.0, 1000.0);
+        gl.BindVertexArray(all_models[0][0].vao);
         for j in 0..num_subdivisions {
             for model, i in all_models[j] {
                 M := math.mat4_translate(math.Vec3{f32(i)*2.2, f32(j)*2.2, 0.0});
+                M = math.mul(M, math.mat4_rotate(math.norm(math.Vec3{cast(f32)rng(), cast(f32)rng(), cast(f32)rng()}), 0.25*cast(f32)glfw.GetTime()) );
+                M = math.mul(M, math.mat4_rotate(math.norm(math.Vec3{cast(f32)rng(), cast(f32)rng(), cast(f32)rng()}), 0.25*cast(f32)glfw.GetTime()) );
                 MV := math.mul(V, M);
                 MVP := math.mul(P, MV);
+                gl.Uniform1f(get_uniform_location(program, "min_area\x00"), model.min_area);
+                gl.Uniform1f(get_uniform_location(program, "max_area\x00"), model.max_area);
                 gl.Uniform3f(get_uniform_location(program, "sphere_pos\x00"), f32(i)*2.2, f32(j)*2.2, 0.0);
                 gl.UniformMatrix4fv(get_uniform_location(program, "MVP\x00"), 1, gl.FALSE, &MVP[0][0]);
                 
@@ -485,7 +576,51 @@ main :: proc() {
                 gl.DrawArrays(gl.TRIANGLES, 0, i32(model.num_vertices));
             }
         }
+
+        /*
+        gl.PolygonMode(  gl.FRONT_AND_BACK, gl.LINE);
+        gl.Uniform1i(get_uniform_location(program, "draw_mode\x00"), 1);
+
+        for j in 0..num_subdivisions {
+            for model, i in all_models[j] {
+                M := math.mat4_translate(math.Vec3{f32(i)*2.2, f32(j)*2.2, 0.0});
+                M = math.mul(M, math.mat4_rotate(math.norm(math.Vec3{cast(f32)rng(), cast(f32)rng(), cast(f32)rng()}), 0.0*cast(f32)glfw.GetTime()) );
+                M = math.mul(M, math.mat4_rotate(math.norm(math.Vec3{cast(f32)rng(), cast(f32)rng(), cast(f32)rng()}), 0.0*cast(f32)glfw.GetTime()) );
+                MV := math.mul(V, M);
+                MVP := math.mul(P, MV);
+                gl.Uniform1f(get_uniform_location(program, "min_area\x00"), model.min_area);
+                gl.Uniform1f(get_uniform_location(program, "max_area\x00"), model.max_area);
+                gl.Uniform3f(get_uniform_location(program, "sphere_pos\x00"), f32(i)*2.2, f32(j)*2.2, 0.0);
+                gl.UniformMatrix4fv(get_uniform_location(program, "MVP\x00"), 1, gl.FALSE, &MVP[0][0]);
+                
+                gl.BindVertexArray(model.vao);
+                gl.DrawArrays(gl.TRIANGLES, 0, i32(model.num_vertices));
+            }
+        }
+        */
+
+        seed = 12345;
+
+        gl.PolygonMode(  gl.FRONT_AND_BACK, gl.FILL);
+        gl.Uniform3f(get_uniform_location(program, "r\x00"), r.x, r.y, r.z);
+        gl.Uniform3f(get_uniform_location(program, "u\x00"), u.x, u.y, u.z);
+        gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), 1);
+        gl.Uniform1f(get_uniform_location(program, "near\x00"), near);
+        gl.Uniform1f(get_uniform_location(program, "far\x00"), far);
+        gl.Uniform1i(get_uniform_location(program, "draw_mode\x00"), 2);
         
+        M := math.mat4_translate(math.Vec3{0.0, 0.0, 0.0});
+        MV := math.mul(V, M);
+        MVP := math.mul(P, MV);
+        gl.UniformMatrix4fv(get_uniform_location(program, "MVP\x00"), 1, gl.FALSE, &MVP[0][0]);
+
+        gl.Uniform3f(get_uniform_location(program, "sphere_pos\x00"), 100*cast(f32)rng(), 50*cast(f32)rng(), 4.0 + 50.0*cast(f32)rng());
+        gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, i32(4), 100);
+        /*
+        for i in 0..10000 {
+        }
+        */
+
         glfw.SwapBuffers(window);
     }
 }
@@ -517,7 +652,7 @@ init_glfw :: proc(resx, resy: i32, title: string) -> (^glfw.window, bool) {
 
     if glfw.Init() == 0 do return nil, false;
 
-    glfw.WindowHint(glfw.SAMPLES, 4);
+    //glfw.WindowHint(glfw.SAMPLES, 8);
     glfw.WindowHint(glfw.CONTEXT_VERSION_MAJOR, 4);
     glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, 5);
     glfw.WindowHint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE);
@@ -526,7 +661,7 @@ init_glfw :: proc(resx, resy: i32, title: string) -> (^glfw.window, bool) {
     if window == nil do return nil, false;
     
     glfw.MakeContextCurrent(window);
-    glfw.SwapInterval(1);
+    glfw.SwapInterval(0);
 
     return window, true;
 }

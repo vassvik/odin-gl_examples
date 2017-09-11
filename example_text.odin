@@ -1,11 +1,10 @@
-import (
-    "fmt.odin";
-    "strings.odin";
-    "math.odin";
-    "external/odin-glfw/glfw.odin";
-    "external/odin-gl/gl.odin";
-    "external/odin-gl_font/font.odin";
-)
+import "core:fmt.odin";
+import "core:strings.odin";
+import "core:math.odin";
+import "shared:odin-glfw/glfw.odin";
+import "shared:odin-gl/gl.odin";
+import "shared:odin-gl_font/font.odin";
+
 
 main :: proc() {
     resx, resy := 1600.0, 900.0;
@@ -27,6 +26,8 @@ main :: proc() {
     
     defer font.cleanup();
 
+    t1 := glfw.GetTime();
+
     for glfw.WindowShouldClose(window) == glfw.FALSE {
         glfw.calculate_frame_timings(window);
         
@@ -46,6 +47,8 @@ main :: proc() {
         str_colors: [len(str)]u16;
         for i in 0..len(str) do str_colors[i] = u16(i)&3;
 
+        t2 := glfw.GetTime();
+
         y_pos : f32 = 0.0;
         font.draw_string(0.0, y_pos, 20.0, str);                               y_pos += 20.0; // unformatted string with implicit palette index passing (implicit 0)
         font.draw_string(0.0, y_pos, 28.0, 3, str);                            y_pos += 28.0; // unformatted string with explicit palette index passing
@@ -53,7 +56,8 @@ main :: proc() {
         font.draw_string(0.0, y_pos, 32.0, 2, str);                            y_pos += 32.0; // unformatted string with explicit palette index passing
         font.draw_format(0.0, y_pos, 16.0, "blehh %d %f: %s", 2, 3.14, str);   y_pos += 16.0; //   formatted string with implicit palette index passing (implicit 0)
         font.draw_format(0.0, y_pos, 20.0, 1, "blah %d %f: %s", 4, 6.28, str); y_pos += 20.0; //   formatted string with explicit palette index passing
-        
+        font.draw_format(0.0, y_pos, 40.0, 1, "frame time = %.3f", (t2 - t1)*1000.0); y_pos += 40.0; //   formatted string with explicit palette index passing
+        t1 = t2;
         glfw.SwapBuffers(window);
     }
 }

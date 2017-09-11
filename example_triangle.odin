@@ -1,9 +1,8 @@
-import (
-    "fmt.odin";
-    "strings.odin";
-    "external/odin-glfw/glfw.odin";
-    "external/odin-gl/gl.odin";
-)
+import "fmt.odin";
+import "strings.odin";
+import "external/odin-glfw/glfw.odin";
+import "external/odin-gl/gl.odin";
+
 
 main :: proc() {
     // setup glfw
@@ -45,9 +44,9 @@ main :: proc() {
 
     // setup vbo
     vertex_data := [...]f32{
-        -0.3, -0.3, 0.0,
-         0.3, -0.3, 0.0,
-         0.0,  0.5, 0.0,
+        -0.3, -0.3,
+         0.3, -0.3,
+         0.0,  0.5,
     };
 
     vbo: u32;
@@ -58,7 +57,7 @@ main :: proc() {
     gl.BufferData(gl.ARRAY_BUFFER, size_of(vertex_data), &vertex_data[0], gl.STATIC_DRAW);
 
     gl.EnableVertexAttribArray(0);
-    gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 0, nil);
+    gl.VertexAttribPointer(0, 2, gl.FLOAT, gl.FALSE, 0, nil);
     
     // main loop
     gl.ClearColor(1.0, 1.0, 1.0, 1.0);
