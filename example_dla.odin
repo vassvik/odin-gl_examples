@@ -1,9 +1,10 @@
-import (
-    "fmt.odin";
-    "strings.odin";
-    "external/odin-glfw/glfw.odin";
-    "external/odin-gl/gl.odin";
-)
+
+import "core:fmt.odin";
+import "core:strings.odin";
+import "shared:odin-glfw/glfw.odin";
+import "shared:odin-gl/gl.odin";
+
+// @NOTE: BROKEN RIGHT NOW
 
 main :: proc() {
     error_callback :: proc(error: i32, desc: ^u8) #cc_c {
@@ -48,8 +49,8 @@ main :: proc() {
     gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 
-    Nx := resx/4;
-    Ny := resy/4;
+    Nx := resx/8;
+    Ny := resy/8;
     grid := make([]f32, Nx*Ny);
 
 
@@ -166,6 +167,7 @@ if false {
                 }
             }
         }
+        if weakest_id == -1 do break;
         grid[weakest_id] = f32(num_solids+1.0);
         num_solids += 1;
         filled += 1;

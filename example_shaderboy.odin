@@ -1,9 +1,8 @@
-import (
-    "fmt.odin";
-    "strings.odin";
-    "external/odin-glfw/glfw.odin";
-    "external/odin-gl/gl.odin";
-)
+
+import "core:fmt.odin";
+import "core:strings.odin";
+import "shared:odin-glfw/glfw.odin";
+import "shared:odin-gl/gl.odin";
 
 main :: proc() {
     // setup glfw

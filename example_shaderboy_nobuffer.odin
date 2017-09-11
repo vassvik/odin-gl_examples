@@ -1,7 +1,7 @@
-import    "fmt.odin";
-import    "strings.odin";
-import    "external/odin-glfw/glfw.odin";
-import    "external/odin-gl/gl.odin";
+import "core:fmt.odin";
+import "core:strings.odin";
+import "shared:odin-glfw/glfw.odin";
+import "shared:odin-gl/gl.odin";
 
 
 main :: proc() {

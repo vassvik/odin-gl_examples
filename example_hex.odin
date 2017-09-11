@@ -1,15 +1,11 @@
-import (
-    "fmt.odin";
-    "strings.odin";
-    "external/odin-glfw/glfw.odin";
-    "external/odin-gl/gl.odin";
-)
 
-a: int = b;
-b: int = a;
+import "core:fmt.odin";
+import "core:strings.odin";
+import "shared:odin-glfw/glfw.odin";
+import "shared:odin-gl/gl.odin";
+
 
 main :: proc() {
-    fmt.println(a,b);
     // setup glfw
     error_callback :: proc(error: i32, desc: ^u8) #cc_c {
         fmt.printf("Error code %d:\n    %s\n", error, strings.to_odin_string(desc));

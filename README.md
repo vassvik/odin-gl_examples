@@ -2,12 +2,17 @@
 
 Require GLFW binaries either locally (windows, .lib and .dll) or in the system paths (linux, .so). 
 
-Initialize the submodules with
+Make sure to get the dependencies and place then in the `shared` collection:
 ```
-git submodule update --init --recursive --remote
+cd Odin/shared
+git clone https://github.com/vassvik/odin-glfw.git
+git clone https://github.com/vassvik/odin-gl.git
+git clone https://github.com/vassvik/odin-gl_font.git
 ```
 
-Currently contains:
+### The following is out of date:
+
+Partial list: Currently contains:
 
 ### example_triangle
 

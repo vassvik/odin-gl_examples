@@ -2,9 +2,9 @@
 import    "core:fmt.odin";
 import    "core:strings.odin";
 import    "core:math.odin";
-import    "external/odin-glfw/glfw.odin";
-import    "external/odin-gl/gl.odin";
-import    "external/odin-gl_font/font.odin";
+import    "shared:odin-glfw/glfw.odin";
+import    "shared:odin-gl/gl.odin";
+import    "shared:odin-gl_font/font.odin";
 
 // from www.paulbourke.net/geometry/platonic/
 at :: 0.5;
