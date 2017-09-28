@@ -1,45 +1,17 @@
 #version 450 core
 
-
-out vec2 fragment_position;
-out vec2 fragment_position2;
-out float radius;
+out vec2 position_normalized;
+out vec2 position_world;
 flat out int instance_id;
 
-
-uniform float time;
 uniform int vertex_mode;
+uniform float time;
+uniform float mouse_radius;
+uniform vec2 mouse_pos;
 uniform vec2 resolution;
 uniform vec4 cam_box;
-uniform vec2 mouse_pos;
-uniform float mouse_radius;
 
-
-struct Point {
-    float x, y;
-    float r;
-};
-
-struct Node {
-    int links[3];
-    float x, y;
-    int type;
-};
-
-struct Link {
-    int front; // Node
-    int back;  // Node
-    int left;  // Disk
-    int right; // Disk
-    float x, y; // Center of link along arc
-    double c; // Cosine of half angle of arc, needs the precision
-    float Ux, Uy; // Position of origin of arc
-    float Cx, Cy; // Position of origin of arc
-    float Cr; // Radius of curvature of arc
-    int type;
-};
-
-
+// For lookup using gl_VertexID
 const vec2 square[4] = {
     vec2(-1.0, -1.0), 
     vec2( 1.0, -1.0), 
@@ -67,6 +39,31 @@ const vec2 octagon[8] = {
     vec2( 0.414213562373095, -1.000000000000000) 
 };
 
+// For lookup using gl_InstanceID
+struct Point {
+    vec2 P;
+    float r;
+};
+
+struct Node {
+    int links[3]; // neighbouring links, 1 (inlet or outlet) or 3 (inside)
+    int type;     // inside (0), inlet (1), outlet (2)
+    vec2 P;       // "center" of node
+};
+
+struct Link {
+    int front;  // Node
+    int back;   // Node
+    int left;   // Disk/Point
+    int right;  // Disk/Point
+    vec2 M;     // Point on center of arc
+    vec2 O;     // Position of origin of arc 
+    vec2 U;     // normalize(M -  O)
+    double c;   // Cosine of half angle of arc sector, needs the precision
+    float R;    // 'Radius of curvature' of arc
+    int type;   // inside (0), inlet (1), outlet (2)
+};
+
 
 layout (std430, binding = 0) buffer point_buffer {
     Point points[];
@@ -88,75 +85,70 @@ layout (std430, binding = 2) buffer link_buffer {
 #define VERTEX_MOUSE_DISK 5
 
 void main() {
-	// expand to unit quad
-	float x = gl_VertexID / 2;
-	float y = gl_VertexID % 2;
+	// expand to unit square/hexagon/octagon
     float scale = 1.05;
-	vec2 p = scale*(2.0 * vec2(x, y) - 1.0);
-    p = scale*square[gl_VertexID];
-	fragment_position = p;
+	vec2 p = scale*square[gl_VertexID];
+	position_normalized = p;
 
-	if (vertex_mode == VERTEX_CYLINDERS) {
-		p *= points[gl_InstanceID].r;
-		p += vec2(points[gl_InstanceID].x, points[gl_InstanceID].y);
-		radius = points[gl_InstanceID].r;
-	} else if (vertex_mode == VERTEX_LINK) {
-        if (links[gl_InstanceID].front == -1) {
+	if (vertex_mode == VERTEX_LINK) {
+        // Light blue quads, red if selected by mouse
+        Link link = links[gl_InstanceID];
+
+        switch (gl_VertexID) {
+        case 0:
+            p = points[link.left].P; 
+            break;
+        case 1:
+            p = nodes[link.front].P;
+            break;
+        case 2:
+            p = nodes[link.back].P;
+            break;
+        case 3:
+            p = points[link.right].P; 
+            break;
+        default:
             p = vec2(0.0, 0.0);
-        } else if (gl_VertexID == 0) {
-            p = vec2(points[links[gl_InstanceID].left].x, points[links[gl_InstanceID].left].y);
-        } else if (gl_VertexID == 1) {
-            p = vec2(nodes[links[gl_InstanceID].front].x, nodes[links[gl_InstanceID].front].y);
-        } else if (gl_VertexID == 2) {
-            p = vec2(nodes[links[gl_InstanceID].back].x, nodes[links[gl_InstanceID].back].y);
-        } else {
-            p = vec2(points[links[gl_InstanceID].right].x, points[links[gl_InstanceID].right].y);
-        }
-    } else if (vertex_mode == VERTEX_NODE_CENTER) {
-        radius = 0.5;
-        p *= radius;
-        p += vec2(nodes[gl_InstanceID].x, nodes[gl_InstanceID].y);
-    } else if (vertex_mode == VERTEX_LINK_CENTER) {
-        radius = 0.25;
-        p *= radius;
-        p += vec2(links[gl_InstanceID].x, links[gl_InstanceID].y);
-    } else if (vertex_mode == VERTEX_LINK_ARC) {
-        Link l = links[gl_InstanceID];
-
-        if (l.Cr > 6.6e4) {
-            p = scale*(2.0 * vec2(x, y) - 1.0);
-            dvec2 p1 = vec2(nodes[l.front].x, nodes[l.front].y);
-            dvec2 p2 = vec2(nodes[l.back].x, nodes[l.back].y);
-
-            dvec2 pm = (p1 + p2)/2.0;
-            double dx = abs(p2.x - p1.x) + 1.2;
-            double dy = abs(p2.y - p1.y) + 1.2;
-            radius = l.Cr;
-
-            p = vec2(dvec2(p)*dvec2(dx, dy)/2.0 + pm);
-            fragment_position = p;
-        } else {
-            float scale = 1.1;
-            p = scale*(2.0 * vec2(x, y) - 1.0);
-            vec2 p1 = vec2(nodes[l.front].x, nodes[l.front].y);
-            vec2 p2 = vec2(nodes[l.back].x, nodes[l.back].y);
-
-            vec2 pm = (p1 + p2)/2.0;
-            float dx = abs(p2.x - p1.x) + 1.2;
-            float dy = abs(p2.y - p1.y) + 1.2;
-            radius = l.Cr;
-
-            p *= vec2(dx, dy)/2.0;
-            p += pm;
-
-            fragment_position = scale*(2.0*(p - vec2(l.Cx - scale*radius, l.Cy - scale*radius))/(2*scale*radius) - 1.0);
-            fragment_position2 = p;
+            break;
         }
     } else if (vertex_mode == VERTEX_MOUSE_DISK) {
-        radius = mouse_radius;
-        p *= radius;
+        // blue disk following mouse cursor
+        p *= mouse_radius;
         p += mouse_pos;
-    }
+    } else if (vertex_mode == VERTEX_CYLINDERS) {
+        // green cylinders
+        p *= points[gl_InstanceID].r;
+        p += points[gl_InstanceID].P;
+    } else if (vertex_mode == VERTEX_NODE_CENTER) {
+        // yellow disks 
+        p *= 0.5;
+        p += nodes[gl_InstanceID].P;
+    } else if (vertex_mode == VERTEX_LINK_CENTER) {
+        // purple disks
+        p *= 0.25;
+        p += links[gl_InstanceID].M;
+    } else if (vertex_mode == VERTEX_LINK_ARC) {
+        // gray arc
+        Link l = links[gl_InstanceID];
+
+        vec2 p1 = nodes[l.front].P;
+        vec2 p2 = nodes[l.back].P;
+
+        // axis aligned bounding box, could probably make it more tight by rotating it
+        // constant of 1.2 works with the small arcs
+        vec2 pm = (p1 + p2)/2.0;
+        float dx = abs(p2.x - p1.x) + 1.2;
+        float dy = abs(p2.y - p1.y) + 1.2;
+        
+        p = p*vec2(dx, dy)/2.0 + pm;
+
+        if (l.R > 6.6e4) {
+            position_normalized = p;
+        } else {
+            position_normalized = scale*(2.0*(p - (l.O - scale*l.R))/(2*scale*l.R) - 1.0);
+            position_world = p;
+        }
+    } 
 
 	// transform to NDC
     p = (p - cam_box.xy)/(cam_box.zw - cam_box.xy);

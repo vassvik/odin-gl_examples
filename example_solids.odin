@@ -81,27 +81,28 @@ dodecahedron_vertices := [...]Vec3 {
 };
 
 Vec3 :: struct #ordered {
-    x, y, z: f32;
+    x, y, z: f32,
 };
 
 Vertex :: struct #ordered {
-    position, normal: Vec3;
-    area: f32;
+    position, normal: Vec3,
+    area: f32,
 };
 
 Model :: struct {
-    vertices: []Vertex;
+    vertices: []Vertex,
     
-    num_vertices: int;
-    num_triangles: int;
+    num_vertices: int,
+    num_triangles: int,
     
-    base_name: string;
-    subdivision: int;
+    base_name: string,
+    subdivision: int,
 
-    vao: u32;
-    vbo: u32;
+    vao: u32,
+    vbo: u32,
 
-    min_area, max_area : f32 = 1.0e9, -1.0e9;
+    min_area: f32 = 1.0e9,
+    max_area : f32 = -1.0e9,
 };
 
 model_get_base_name :: proc(vertices_per_face, num_platonic_faces: int) -> string {

@@ -4,7 +4,7 @@ import "core:strings.odin";
 import "shared:odin-glfw/glfw.odin";
 import "shared:odin-gl/gl.odin";
 
-// @NOTE: BROKEN RIGHT NOW
+
 
 main :: proc() {
     error_callback :: proc(error: i32, desc: ^u8) #cc_c {
@@ -49,8 +49,8 @@ main :: proc() {
     gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 
-    Nx := resx/4;
-    Ny := resy/4;
+    Nx := resx/2;
+    Ny := resy/2;
     grid := make([]f32, Nx*Ny);
 
     num_solids := 1;
