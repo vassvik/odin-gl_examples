@@ -106,9 +106,9 @@ Model :: struct {
 };
 
 model_get_base_name :: proc(vertices_per_face, num_platonic_faces: int) -> string {
-    match vertices_per_face {
+    switch vertices_per_face {
     case 3:
-        match num_platonic_faces {
+        switch num_platonic_faces {
         case 4:
             return "tetrahedron";
         case 8:
@@ -275,7 +275,7 @@ subdivide_base_model_platonic :: proc(verts: []Vec3, vertices_per_face: int) -> 
     ctr := 0;
     for i in 0..num_platonic_faces {
         // triangulate the platonic face, in a triangle fan or splitting a triangle into 4
-        match vertices_per_face {
+        switch vertices_per_face {
         case 3: // tetrahedron, octahedron, icosahedron
             v1 := verts[3*i+0];
             v2 := verts[3*i+1];
@@ -426,7 +426,7 @@ main :: proc() {
 
     gl.ClearColor(1.0, 1.0, 1.0, 1.0);
 
-    if !font.init("extra/font_3x1.bin", "shaders/shader_font.vs", "shaders/shader_font.fs", set_proc_address) do return;  
+    if !font.init("extra/font_3x1.bin", "shaders/shader_font.vs", "shaders/shader_font.fs") do return;  
     
     defer font.cleanup();
 
@@ -551,16 +551,17 @@ main :: proc() {
         gl.Uniform2f(get_uniform_location(program, "resolution\x00"), f32(resx), f32(resy));
 
         V := view(r, u, f, p);
-        near : f32 = 0.001;
-        far : f32 = 100.0;
-        P := math.perspective(3.1415926*45.0/180.0, 1280/720.0, near, far);
+        near : f32 = 0.01;
+        far : f32 = 1000.0;
+        P := math.perspective(45.0*math.PI/180.0, f32(resx/resy), near, far);
 
+        gl.BindVertexArray(all_models[0][0].vao);
+        /*
         seed = 12345;
         gl.PolygonMode(  gl.FRONT_AND_BACK, gl.FILL);
         gl.Uniform1i(get_uniform_location(program, "draw_mode\x00"), 0);
         gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), 0);
         //gl.DepthRange(0.0, 1000.0);
-        gl.BindVertexArray(all_models[0][0].vao);
         for j in 0..num_subdivisions {
             for model, i in all_models[j] {
                 M := math.mat4_translate(math.Vec3{f32(i)*2.2, f32(j)*2.2, 0.0});
@@ -577,6 +578,7 @@ main :: proc() {
                 gl.DrawArrays(gl.TRIANGLES, 0, i32(model.num_vertices));
             }
         }
+        */
 
         /*
         gl.PolygonMode(  gl.FRONT_AND_BACK, gl.LINE);
@@ -602,21 +604,22 @@ main :: proc() {
 
         seed = 12345;
 
-        gl.PolygonMode(  gl.FRONT_AND_BACK, gl.FILL);
+        //gl.PolygonMode(  gl.FRONT_AND_BACK, gl.FILL);
         gl.Uniform3f(get_uniform_location(program, "r\x00"), r.x, r.y, r.z);
         gl.Uniform3f(get_uniform_location(program, "u\x00"), u.x, u.y, u.z);
         gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), 1);
+        gl.Uniform1i(get_uniform_location(program, "draw_mode\x00"), 2);
         gl.Uniform1f(get_uniform_location(program, "near\x00"), near);
         gl.Uniform1f(get_uniform_location(program, "far\x00"), far);
-        gl.Uniform1i(get_uniform_location(program, "draw_mode\x00"), 2);
         
         M := math.mat4_translate(math.Vec3{0.0, 0.0, 0.0});
         MV := math.mul(V, M);
         MVP := math.mul(P, MV);
         gl.UniformMatrix4fv(get_uniform_location(program, "MVP\x00"), 1, gl.FALSE, &MVP[0][0]);
 
-        gl.Uniform3f(get_uniform_location(program, "sphere_pos\x00"), 100*cast(f32)rng(), 50*cast(f32)rng(), 4.0 + 50.0*cast(f32)rng());
-        gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, i32(4), 100);
+        //gl.Uniform3f(get_uniform_location(program, "sphere_pos\x00"), 100*cast(f32)rng(), 50*cast(f32)rng(), 4.0 + 50.0*cast(f32)rng());
+        gl.Uniform3f(get_uniform_location(program, "sphere_pos\x00"), 0.0, 0.0, 0.0);
+        gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, i32(4), 100000);
         /*
         for i in 0..10000 {
         }

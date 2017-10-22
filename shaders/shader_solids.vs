@@ -32,9 +32,9 @@ void main() {
 		float x = gl_VertexID>>1;
 		float y = gl_VertexID&1;
 		float r1 = rand(vec2(gl_InstanceID, 1.0));
-		float r2 = rand(vec2(gl_InstanceID, 2.0));
-		float r3 = rand(vec2(gl_InstanceID, 3.0));
-		spos = vec3(10.0, 10.0, 1.0)*vec3(r1, r2, r3)+vec3(0.0, 0.0, 2.0);
+		float r2 = rand(vec2(101*gl_InstanceID, 2.0));
+		float r3 = rand(vec2(203*gl_InstanceID, 3.0));
+		spos = vec3(100.0, 100.0, 100.0)*vec3(r1, r2, r3)+vec3(0.0, 0.0, 2.0);
 		vec3 p = spos + r*(2.0*x - 1.0) + u*(2.0*y - 1.0);
 		gl_Position = MVP*vec4(p, 1.0);
 	    pos = p;

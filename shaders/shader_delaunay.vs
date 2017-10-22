@@ -77,20 +77,24 @@ layout (std430, binding = 2) buffer link_buffer {
     Link links[];
 };
 
+#define VERTEX_NONE -1
 #define VERTEX_LINK 0
 #define VERTEX_CYLINDERS 1
 #define VERTEX_LINK_ARC 2
 #define VERTEX_LINK_CENTER 3
-#define VERTEX_NODE_CENTER 4
+#define VERTEX_NODE_SMALL 4
 #define VERTEX_MOUSE_DISK 5
+#define VERTEX_NODE_FIT 6
+#define VERTEX_LINK_FIT 7
 
 void main() {
 	// expand to unit square/hexagon/octagon
     float scale = 1.05;
 	vec2 p = scale*square[gl_VertexID];
 	position_normalized = p;
-
-	if (vertex_mode == VERTEX_LINK) {
+    if (vertex_mode == VERTEX_NONE) {
+        p = vec2(1000000.0);
+    } else if (vertex_mode == VERTEX_LINK) {
         // Light blue quads, red if selected by mouse
         Link link = links[gl_InstanceID];
 
@@ -119,13 +123,24 @@ void main() {
         // green cylinders
         p *= points[gl_InstanceID].r;
         p += points[gl_InstanceID].P;
-    } else if (vertex_mode == VERTEX_NODE_CENTER) {
+    } else if (vertex_mode == VERTEX_NODE_SMALL) {
         // yellow disks 
         p *= 0.5;
+        p += nodes[gl_InstanceID].P;
+    } else if (vertex_mode == VERTEX_NODE_FIT) {
+        // yellow disks 
+        Point Q = points[links[nodes[gl_InstanceID].links[0]].left];
+        float r = length(Q.P - nodes[gl_InstanceID].P) - Q.r;
+        p *= r;
         p += nodes[gl_InstanceID].P;
     } else if (vertex_mode == VERTEX_LINK_CENTER) {
         // purple disks
         p *= 0.25;
+        p += links[gl_InstanceID].M;
+    } else if (vertex_mode == VERTEX_LINK_FIT) {
+        // purple disks
+        float r = length(links[gl_InstanceID].M - points[links[gl_InstanceID].left].P) - points[links[gl_InstanceID].left].r;
+        p *= r;
         p += links[gl_InstanceID].M;
     } else if (vertex_mode == VERTEX_LINK_ARC) {
         // gray arc
@@ -137,8 +152,8 @@ void main() {
         // axis aligned bounding box, could probably make it more tight by rotating it
         // constant of 1.2 works with the small arcs
         vec2 pm = (p1 + p2)/2.0;
-        float dx = abs(p2.x - p1.x) + 1.2;
-        float dy = abs(p2.y - p1.y) + 1.2;
+        float dx = abs(p2.x - p1.x) + 1.9;
+        float dy = abs(p2.y - p1.y) + 1.5;
         
         p = p*vec2(dx, dy)/2.0 + pm;
 
@@ -149,6 +164,7 @@ void main() {
             position_world = p;
         }
     } 
+    position_world = p;
 
 	// transform to NDC
     p = (p - cam_box.xy)/(cam_box.zw - cam_box.xy);

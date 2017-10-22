@@ -65,7 +65,7 @@ main :: proc() {
 	}
 	gl.load_up_to(4, 5, set_proc_address);
 
-	if !font.init("extra/font_3x1.bin", "shaders/shader_font.vs", "shaders/shader_font.fs", set_proc_address) do return;  
+	if !font.init("extra/font_3x1.bin", "shaders/shader_font.vs", "shaders/shader_font.fs") do return;  
 
 	// load shaders
 	program, shader_success := gl.load_shaders("shaders/shader_delaunay.vs", "shaders/shader_delaunay.fs");
@@ -80,12 +80,13 @@ main :: proc() {
 
 	t1 := glfw.GetTime();
 	// load triangulation
-	table, success := parser.table_from_file("extra/triangulation.txt");
+	table, success := parser.table_from_file("extra/triangulation2.txt");
 	if !success do return;
 	defer {
-		for _, i in table do for _, j in table[i] do free(table[i][j]);
-		for _, i in table do free(table[i]);
-		free(table);
+		//for _, i in table do for _, j in table[i] do free(table[i][j]);
+		//for _, i in table do free(table[i]);
+		//free(table);
+		// NOTE: SEGFAULT?
 	}
 
 	// parse table
@@ -93,6 +94,7 @@ main :: proc() {
 	points := make([]Point, num_points);
 
 	for line, i in table[1..1+num_points] {
+		//fmt.println(i, line);
 		points[i] = Point{Vec2f{parser.f32_from_string(line[0]), parser.f32_from_string(line[1])}, parser.f32_from_string(line[2]), 0};
 	}
 
@@ -249,7 +251,8 @@ main :: proc() {
 		}
 	}
 
-	to_deactivate := [...]int{4214, 4216, 4217, 748, 195, 196, 751, 4215, 4211, 4218, 5567, 752, 5557, 43, 575, /*small outer edge*/1861};
+	//to_deactivate := [...]int{4214, 4216, 4217, 748, 195, 196, 751, 4215, 4211, 4218, 5567, 752, 5557, 43, 575, /*small outer edge*/1861};
+	to_deactivate := [...]int{62, 63, 281, 388, 386, 387, 384, 385, 732, 918, 279, 280, 275, 1069, 919};
 
 	for i in to_deactivate {
 		triangles[i].status = 1;
@@ -397,7 +400,19 @@ main :: proc() {
 
 	}
 
+	minx, maxx, miny, maxy :f32= 1.0e9, -1.0e9, 1.0e9, -1.0e9;
 
+	for i in 0..num_points {
+		minx = min(minx, points[i].x);
+		maxx = max(maxx, points[i].x);
+		miny = min(miny, points[i].y);
+		maxy = max(maxy, points[i].y);
+	}
+
+	xmid := 0.5*(maxx + minx);
+	ymid := 0.5*(maxy + miny);
+
+	fmt.println(xmid, ymid);
 
 	l2 : i32 = 0;
 	for k in 0..num_edges {
@@ -451,7 +466,7 @@ main :: proc() {
 					//fmt.println("qweqwe", p3, p3_, math.mag(p3_ - P2), math.mag(p3 - P2));
 
 				}
-				n : i32 = abs(xx - 1000) < 300 && abs(yy - 1000) < 300 ? 1 : 2;
+				n : i32 = abs(xx - xmid) < (maxx - minx)/10.0 && abs(yy - ymid) < (maxx - minx)/10.0 ? 1 : 2;
 
 				p1 := triangles[t1].R;
 				p2 := Point{Vec2f{xx, yy}, 1.0, 0.0};
@@ -486,7 +501,7 @@ main :: proc() {
 				xx := points[i].x + 2.0*d*dx - dx1;
 				yy := points[i].y + 2.0*d*dy - dy1;
 
-				n : i32 = abs(xx - 1000) < 300 && abs(yy - 1000) < 300 ? 1 : 2;
+				n : i32 = abs(xx - xmid) < (maxx - minx)/10.0 && abs(yy - ymid) < (maxx - minx)/10.0 ? 1 : 2;
 
 				p2 := triangles[triangles[edges[k].t1].status == 1 ? t2 : t1].R;
 				p1 := Point{Vec2f{xx, yy}, 1.0, 0.0};
@@ -926,7 +941,7 @@ main :: proc() {
 			for n, i in nodes do nodes2[i] = n;
 			for l, i in links do links2[i] = l;
 
-			fmt.println(os.write_entire_file("extra/stuff.bin", data));
+			fmt.println(os.write_entire_file("extra/stuff2.bin", data));
 			
 			/*
 			when ODIN_OS == "linux" {
@@ -1058,7 +1073,7 @@ main :: proc() {
 		gl.Uniform1i(get_uniform_location(program, "chosen_link\x00"), cast(i32)(chosen_link));   
 		gl.Uniform2f(get_uniform_location(program, "mouse_pos\x00"), cast(f32)(closest_point.x), cast(f32)(closest_point.y));   
 		gl.Uniform1f(get_uniform_location(program, "mouse_radius\x00"), cast(f32)(closest_distance));   
-
+		gl.Uniform1i(get_uniform_location(program, "should_clear\x00"), cast(i32)(1));   
 
 		gl.BindVertexArray(vao); // empty
 

@@ -18,6 +18,9 @@ append_to_log :: proc(log: ^$T/[dynamic]string, fmt_string: string, vals: ...any
 }
 temp_log: [dynamic]string;
 
+Lx, Ly, Lz: f64;
+min_x, min_y, min_z := +1.0e9, +1.0e9, +1.0e9;
+max_x, max_y, max_z := -1.0e9, -1.0e9, -1.0e9;
 
 main :: proc() {
 	scroll_callback :: proc(window: ^glfw.window, dx, dy: f64) #cc_c {
@@ -37,7 +40,7 @@ main :: proc() {
 	glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, 5);
 	glfw.WindowHint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE);
 
-	resx, resy := 1600.0, 900.0;
+	resx, resy := 1920.0, 1000.0;
 	window := glfw.CreateWindow(i32(resx), i32(resy), "Odin Delaunay ", nil, nil);
 	if window == nil do return;
 
@@ -51,7 +54,7 @@ main :: proc() {
 	}
 	gl.load_up_to(4, 5, set_proc_address);
 
-	if !font.init("extra/font_3x1.bin", "shaders/shader_font.vs", "shaders/shader_font.fs", set_proc_address) do return;  
+	if !font.init("extra/font_3x1.bin", "shaders/shader_font.vs", "shaders/shader_font.fs") do return;  
 
 	// load shaders
 	program, shader_success := gl.load_shaders("shaders/shader_delaunay.vs", "shaders/shader_delaunay.fs");
@@ -71,6 +74,14 @@ main :: proc() {
 		fmt.println("Could not read file");
 		return;
 	}
+
+
+	for node in nodes {
+		min_x, min_y, min_z = min(min_x, cast(f64)node.x), min(min_y, cast(f64)node.y), min(min_z, cast(f64)0.0);
+		max_x, max_y, max_z = max(max_x, cast(f64)node.x), max(max_y, cast(f64)node.y), max(max_z, cast(f64)0.0);
+	}
+	Lx, Ly, Lz = (max_x - min_x), (max_y - min_y), (max_z - min_z);
+
 
 
 	// uniform buffers
@@ -116,12 +127,24 @@ main :: proc() {
 		glfw.KEY_D,
 		glfw.KEY_F,
 		glfw.KEY_Z,
+		glfw.KEY_C,
+		glfw.KEY_1,
+		glfw.KEY_2,
+		glfw.KEY_3,
+		glfw.KEY_4,
+		glfw.KEY_5,
+		glfw.KEY_6,
+		glfw.KEY_7,
+		glfw.KEY_8,
+		glfw.KEY_9,
+		glfw.KEY_0,
 		glfw.KEY_LEFT,
 		glfw.KEY_RIGHT,
 		glfw.KEY_SPACE,
 		glfw.KEY_F5,
 		glfw.KEY_TAB,
 		glfw.KEY_ESCAPE,
+		glfw.KEY_LEFT_CONTROL,
 	};
 
 	enable_vsync := true;
@@ -140,6 +163,8 @@ main :: proc() {
 		gl.DeleteBuffers(1, &buf_nodes);
 		gl.DeleteBuffers(1, &buf_links);
 	}
+
+	draw_states := [10]bool{true, true, true, true, true, true, true, false, false, true};
 
 	gl.BindBufferBase(gl.SHADER_STORAGE_BUFFER, 0, buf_points);
 	gl.BindBufferBase(gl.SHADER_STORAGE_BUFFER, 1, buf_nodes);
@@ -210,6 +235,9 @@ main :: proc() {
 
 	t1 := glfw.GetTime();
 
+	should_clear := true;
+	theta := 0.0;
+
 	for glfw.WindowShouldClose(window) == glfw.FALSE {
 		for _, i in temp_log do free(temp_log[i]);
 		clear(&temp_log);
@@ -231,6 +259,10 @@ main :: proc() {
 		mouse_dx, mouse_dy := mouse_x - mouse_x_prev, mouse_y - mouse_y_prev;
 		scroll_dx, scroll_dy := scroll_x - scroll_x_prev, scroll_y - scroll_y_prev;
 
+		for key in polled_keys {
+			key_states[key] = ((key_states[key] & 1) << 1) | (glfw.GetKey(window, key) << 0);
+		}
+
 		mouse_button: [5]i32;
 		for i in 0..5 do mouse_button[i] = glfw.GetMouseButton(window, glfw.MOUSE_BUTTON_1 + cast(i32)i);
 
@@ -238,26 +270,29 @@ main :: proc() {
 		if mouse_button[0] == 1 {
 			x -= f32(mouse_dx/resx*f64(dx));
 			y += f32(mouse_dy/resy*f64(dy));
-		}	
+		}
 
 		x += f32(0.3*f64(dx)*dt * f64((key_states[glfw.KEY_D]&1) - key_states[glfw.KEY_A]&1));
 		y += f32(0.3*f64(dy)*dt * f64((key_states[glfw.KEY_W]&1) - key_states[glfw.KEY_S]&1));
-
-		zoom_factor := cast(f32)math.pow(0.95, scroll_dy);
-
 		xend := f32(f64(x) + mouse_x*f64(dx)/resx);           // convert screen position to world cooridnates
 		yend := f32(f64(y) + (resy - mouse_y)*f64(dy)/resy);   
-		x = (1.0-zoom_factor)*xend + zoom_factor*x;       // update lower left corner
-		y = (1.0-zoom_factor)*yend + zoom_factor*y;
 
-		dx *= zoom_factor;
-		dy *= zoom_factor;
+		if key_states[glfw.KEY_LEFT_CONTROL]&1 != 1 {
+			zoom_factor := cast(f32)math.pow(0.95, scroll_dy);
 
-		for key in polled_keys {
-			key_states[key] = ((key_states[key] & 1) << 1) | (glfw.GetKey(window, key) << 0);
+			x = (1.0-zoom_factor)*xend + zoom_factor*x;       // update lower left corner
+			y = (1.0-zoom_factor)*yend + zoom_factor*y;
+
+			dx *= zoom_factor;
+			dy *= zoom_factor;
+		} else {
+			theta = clamp(theta + 5*scroll_dy, 0.0, 180.0);
 		}
 
+		
 
+
+		append_to_log(&temp_log, "theta = %.1f", theta);
 		append_to_log(&temp_log, "mousepos = {%.1f, %.1f}", xend, yend);
 
 
@@ -300,8 +335,6 @@ main :: proc() {
 				O := Vec2d{cast(f64)links[chosen_link].O.x, cast(f64)links[chosen_link].O.y};
 				closest_point = O + (P - O)*(R/math.mag(P - O));
 				B = O + (0.5*(A + C) - O)*(R/math.mag(0.5*(A + C) - O));
-
-
 			} else {
 				p := P;
 				n := math.norm0(b - a);
@@ -328,7 +361,8 @@ main :: proc() {
 			append_to_log(&temp_log, "mid   = {%f, %f}", chosen_link != -1 ? links[chosen_link].P.x : 0.0, chosen_link != -1 ? links[chosen_link].P.y : 0.0);
 			append_to_log(&temp_log, "front = {%f, %f}", chosen_link != -1 ? nodes[links[chosen_link].front].x : 0.0, chosen_link != -1 ? nodes[links[chosen_link].front].y : 0.0);
 			
-			coeffs := coeffs_from_link(links, nodes, points, chosen_link);
+			ts, points_regression, coeffs, coeffs3 := coeffs_from_link(links, nodes, points, chosen_link);
+			coeffs2 := [3]f64{coeffs[0], coeffs[1] - coeffs[3]/2.0 - 3.0*coeffs[4]/4.0, coeffs[2] + 3*coeffs[3]/2.0 + 7*coeffs[4]/4.0};
 			tt: f64;
 
 			if R <= 6.6e4 {
@@ -353,21 +387,11 @@ main :: proc() {
 
 				{
 					for i in 0..5 {
-						t := 0.25*f64(i);
-						points_regression[i] = O + R*Vec2d{math.cos(min(aa, aaa) + a2*t), math.sin(min(aa, aaa) + a2*t)};
-					}
-
-					if math.mag(points_regression[0] - a) < 1.0e-0 {
-
-					} else if math.mag(points_regression[0] - b) < 1.0e-0 {
-						points_regression[0], points_regression[1], points_regression[3], points_regression[4] = points_regression[4], points_regression[3], points_regression[1], points_regression[0];
-					} else {
-						fmt.println("ERROR");
-					}
-
-					for i in 0..5 {
-						t := 0.25*f64(i);
-						append_to_log(&temp_log, "P(%.2f) = {%.2f, %.2f}, r = %.6f, %.6f", t, points_regression[i].x, points_regression[i].y, math.mag(points_regression[i] - P1) - R1, math.mag(points_regression[i] - P2) - R2);
+						t := ts[i];
+						p := cast(f64)coeffs[0] + cast(f64)coeffs[1]*t + cast(f64)coeffs[2]*t*t + cast(f64)coeffs[3]*t*t*t + cast(f64)coeffs[4]*t*t*t*t;
+						r := max(math.mag(points_regression[i] - P1) - R1, math.mag(points_regression[i] - P2) - R2);
+						e := abs(p - r)/r;
+						append_to_log(&temp_log, "P(%.2f) = {%.2f, %.2f}, R = {left: %.4f, right: %.4f, fit: %.4f}, e = %.4f%%", t, points_regression[i].x, points_regression[i].y, math.mag(points_regression[i] - P1) - R1, math.mag(points_regression[i] - P2) - R2, p, 100*e);
 					}
 
 					A1 = a1;
@@ -377,9 +401,11 @@ main :: proc() {
 
 			} else {
 				for i in 0..5 {
-					t := 0.25*f64(i);
-					points_regression[i] = A + (C - A)*t;
-					append_to_log(&temp_log, "P(%.2f) = {%.2f, %.2f}, r = %.6f, %.6f", t, points_regression[i].x, points_regression[i].y, math.mag(points_regression[i] - P1) - R1, math.mag(points_regression[i] - P2) - R2);
+					t := ts[i];
+					p := cast(f64)coeffs[0] + cast(f64)coeffs[1]*t + cast(f64)coeffs[2]*t*t + cast(f64)coeffs[3]*t*t*t + cast(f64)coeffs[4]*t*t*t*t;
+					r := max(math.mag(points_regression[i] - P1) - R1, math.mag(points_regression[i] - P2) - R2);
+					e := abs(p - r)/r;
+					append_to_log(&temp_log, "P(%.2f) = {%.2f, %.2f}, R = {left: %.4f, right: %.4f, fit: %.4f}, e = %.4f%%", t, points_regression[i].x, points_regression[i].y, math.mag(points_regression[i] - P1) - R1, math.mag(points_regression[i] - P2) - R2, p, 100*e);
 				}
 				p := P;
 				n := math.norm0(b - a);
@@ -389,18 +415,62 @@ main :: proc() {
 				tt = math.mag(closest_point - a)/math.mag(b - a);
 			}
 			
-			p := cast(f64)coeffs[0] + cast(f64)coeffs[1]*tt + cast(f64)coeffs[2]*tt*tt + cast(f64)coeffs[3]*tt*tt*tt + cast(f64)coeffs[4]*tt*tt*tt*tt;
-			append_to_log(&temp_log, "P(%.2f) = {%.2f, %.2f}, r = %.6f, %.6f", tt, closest_point.x, closest_point.y, math.mag(closest_point - P1) - R1, math.mag(closest_point - P2) - R2);
+			{
+				p := cast(f64)coeffs[0] + cast(f64)coeffs[1]*tt + cast(f64)coeffs[2]*tt*tt + cast(f64)coeffs[3]*tt*tt*tt + cast(f64)coeffs[4]*tt*tt*tt*tt;
+				p2 := cast(f64)coeffs2[0] + cast(f64)coeffs2[1]*tt + cast(f64)coeffs2[2]*tt*tt;
+
+				
+				A := cast(f64)coeffs[0];
+				B := cast(f64)coeffs[1];
+				C := cast(f64)coeffs[2];
+				D := cast(f64)coeffs[3];
+				E := cast(f64)coeffs[4];
+
+				A2 := cast(f64)coeffs3[0];
+				B2 := cast(f64)coeffs3[1];
+				C2 := cast(f64)coeffs3[2];
+				D2 := cast(f64)coeffs3[3];
+				E2 := cast(f64)coeffs3[4];
+
+				// r(x) = A + Bx + Cx² + Dx³ + Ex⁴
+				// r'(x) = B + 2Cx + 3Dx² + 4Ex³
+				// R(x) = r(x) / cos(0 - atan(r'(x)))
+				// cos(alpha(x)) = r(x)/R(x)
+				// R(x) = r(x) / cos(cos^-1(r(x)/R(x)))
+
+				t := tt;
+				r := A2 + B2*t + C2*t*t + D2*t*t*t + E2*t*t*t*t;
+				R := A + B*t + C*t*t + D*t*t*t + E*t*t*t*t;
+				dR := B + 2*C*t + 3*D*t*t + 4*E*t*t*t;
+				a := acos(min(1.0, r/R));
+				dr := r / math.cos(theta*math.PI/180.0 - (dR > 0.0 ? a : -a));
+				//dr = (dR > 0.0 ? -acos(min(1.0, r/R)) : acos(min(1.0, r/R)))*180.0/math.PI;
+				//dr = dR;
+				//dr = math.cos(theta*math.PI/180.0 - acos(min(1.0, r/R)));
+				//dr = r/R;
+
+				pc := 1.0/dr;
+				pc0 := 1.0/R;
+
+				rr := max(math.mag(closest_point - P1) - R1, math.mag(closest_point - P2) - R2);
+				e := abs(R - rr)/rr;
+				
+				append_to_log(&temp_log, "P(%.2f) = {%.2f, %.2f}, R0 = {left: %.4f, right: %.4f, fit: %.4f}, pc = %.4f, pc0 = %.4f, r = %.4f, R = %.4f, a = %.4f, e = %.2f%%", tt, closest_point.x, closest_point.y, math.mag(closest_point - P1) - R1, math.mag(closest_point - P2) - R2, R, pc, pc0, r, dr, a, 100*e);
+			}
+
 			append_to_log(&temp_log, "%s", "");
 			append_to_log(&temp_log, "R = %f",        chosen_link != -1 ? links[chosen_link].Cr : 0.0);
 			append_to_log(&temp_log, "O = {%f, %f}",     chosen_link != -1 ? links[chosen_link].O.x : 0.0, chosen_link != -1 ? links[chosen_link].O.y : 0.0);
 
 		}
 
-
 		if (key_states[glfw.KEY_TAB] == 1) {
 			enable_vsync = !enable_vsync;
 			glfw.SwapInterval(cast(i32)enable_vsync);
+		}
+
+		if (key_states[glfw.KEY_C] == 1) {
+			should_clear = !should_clear;
 		}
 
 		if (key_states[glfw.KEY_F5] == 1) {
@@ -454,12 +524,18 @@ main :: proc() {
 			save_network(links, nodes, points);
 		}
 
+		for i in 0..10 {
+			if key_states[glfw.KEY_0 + i32(i)] == 1 {
+				draw_states[i] = !draw_states[i];
+			}
+		}
+
 		mouse_x_prev, mouse_y_prev = mouse_x, mouse_y;
 		scroll_x_prev, scroll_y_prev = scroll_x, scroll_y;
 		for i in 0..5 do mouse_button_prev[i] = mouse_button[i];
 
 		// clear screen
-		gl.Clear(gl.COLOR_BUFFER_BIT);
+		if should_clear do gl.Clear(gl.COLOR_BUFFER_BIT);
 
 		gl.BindBufferBase(gl.SHADER_STORAGE_BUFFER, 0, buf_points);
 		gl.BindBufferBase(gl.SHADER_STORAGE_BUFFER, 1, buf_nodes);
@@ -471,48 +547,66 @@ main :: proc() {
 		gl.Uniform2f(get_uniform_location(program, "resolution\x00"), f32(resx), f32(resy));
 		gl.Uniform4f(get_uniform_location(program, "cam_box\x00"), x, y, x + dx, y + dy);   
 		gl.Uniform1i(get_uniform_location(program, "chosen_link\x00"), cast(i32)(chosen_link));   
+		gl.Uniform1i(get_uniform_location(program, "should_clear\x00"), cast(i32)(should_clear));   
+		gl.Uniform1i(get_uniform_location(program, "should_highlight\x00"), cast(i32)(draw_states[9]));   
 		gl.Uniform2f(get_uniform_location(program, "mouse_pos\x00"), cast(f32)(closest_point.x), cast(f32)(closest_point.y));   
 		gl.Uniform1f(get_uniform_location(program, "mouse_radius\x00"), cast(f32)(closest_distance));   
 
 
 		gl.BindVertexArray(vao); // empty
 
+
+		for i in 0..(should_clear ? 1 : 2) {
+			
         // light blue links (background)
-        gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), i32(0));
-        gl.Uniform1i(get_uniform_location(program, "shade_mode\x00"), i32(0));
-        gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, cast(i32)num_links);
+        gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), i32(draw_states[1+0] ? 0 : -1));
+        gl.Uniform1i(get_uniform_location(program, "shade_mode\x00"), i32(draw_states[1+0] ? 0 : -1));
+        if should_clear do gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, cast(i32)num_links);
         
         // green disks
-        gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), i32(1));
-        gl.Uniform1i(get_uniform_location(program, "shade_mode\x00"), i32(1));
+        gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), i32(draw_states[1+1] ? 1 : -1));
+        gl.Uniform1i(get_uniform_location(program, "shade_mode\x00"), i32(draw_states[1+1] ? 1 : -1));
         gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, cast(i32)num_points);
 		
         // black link arc
-        gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), i32(2));
-        gl.Uniform1i(get_uniform_location(program, "shade_mode\x00"), i32(2));
-        gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, cast(i32)num_links);
+        gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), i32(draw_states[1+2] ? 2 : -1));
+        gl.Uniform1i(get_uniform_location(program, "shade_mode\x00"), i32(draw_states[1+2] ? 2 : -1));
+        if should_clear do gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, cast(i32)num_links);
         
         // purple disk at edge connecting two green disks
-        gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), i32(3));
-        gl.Uniform1i(get_uniform_location(program, "shade_mode\x00"), i32(3));
-        gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, cast(i32)num_links);
+        gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), i32(draw_states[1+3] ? 3 : -1));
+        gl.Uniform1i(get_uniform_location(program, "shade_mode\x00"), i32(draw_states[1+3] ? 3 : -1));
+        if should_clear do gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, cast(i32)num_links);
 
-        // yellow node center disks
-        gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), i32(4));
-        gl.Uniform1i(get_uniform_location(program, "shade_mode\x00"), i32(4));
-        gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, cast(i32)num_nodes);
-  
         // blue disk at mouse cursor
 		gl.Uniform1f(get_uniform_location(program, "mouse_radius\x00"), cast(f32)(closest_distance));   
-        gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), i32(5));
-        gl.Uniform1i(get_uniform_location(program, "shade_mode\x00"), i32(5));
-        gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, cast(i32)1);     
-
-		gl.Uniform1f(get_uniform_location(program, "mouse_radius\x00"), cast(f32)(0.25));   
-        gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), i32(5));
-        gl.Uniform1i(get_uniform_location(program, "shade_mode\x00"), i32(4));
+        gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), i32(draw_states[1+5] ? 5 : -1));
+        gl.Uniform1i(get_uniform_location(program, "shade_mode\x00"), i32(draw_states[1+5] ? 5 : -1));
         gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, cast(i32)1); 
-		
+
+        // purple disk at edges radius
+        gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), i32(draw_states[1+7] ? 7 : -1));
+        gl.Uniform1i(get_uniform_location(program, "shade_mode\x00"), i32(draw_states[1+7] ? 7 : -1));
+        gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, cast(i32)num_links);     
+
+        // yellow disk at mouse cursor
+		gl.Uniform1f(get_uniform_location(program, "mouse_radius\x00"), cast(f32)(0.25));   
+        gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), i32(draw_states[1+4] ? 5 : -1));
+        gl.Uniform1i(get_uniform_location(program, "shade_mode\x00"), i32(draw_states[1+4] ? 4 : -1));
+        gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, cast(i32)1); 
+        
+        // yellow node center disks
+        gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), i32(draw_states[1+4] ? 4 : -1));
+        gl.Uniform1i(get_uniform_location(program, "shade_mode\x00"), i32(draw_states[1+4] ? 4 : -1));
+        gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, cast(i32)num_nodes);
+
+        
+        // blue disk at nodes
+        gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), i32(draw_states[1+6] ? 6 : -1));
+        gl.Uniform1i(get_uniform_location(program, "shade_mode\x00"), i32(draw_states[1+6] ? 6 : -1));
+        gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, cast(i32)num_nodes); 
+
+  
 		colors_font := font.get_colors();
 		for i in 0..4 do colors_font[i] = font.Vec4{0.0, 0.0, 0.0, 1.0};
 		
@@ -520,11 +614,12 @@ main :: proc() {
 
 		ypos : f32 = 0.0;
 		for s in temp_log {
-			font.draw_string(0.0, ypos,   20.0, s);
+			if draw_states[0] do font.draw_string(0.0, ypos,   20.0, s);
 			ypos += s == "" ? 10.0 : 20.0;
 		}
 
 		glfw.SwapBuffers(window);
+		}
 
 	}
 }
@@ -559,6 +654,12 @@ save_network :: proc(links: []Link, nodes: []Node, points: []Point) {
 	node_neighbours2 := make([][3]i32, num_nodes); defer free(node_neighbours2);
 	link_neighbours2 := make([][3]i32, num_nodes); defer free(link_neighbours2);
 
+	for node, i in nodes {
+		for j in 0..3 {
+			node_neighbours2[i][j] = -1;
+		}
+	}
+
 	max_neighbours := 3;
 	total_neighbours : i32 = 0;
 	for node, i in nodes {
@@ -584,19 +685,21 @@ save_network :: proc(links: []Link, nodes: []Node, points: []Point) {
 	start := 0;
 	stop := 0;
 
-	Node :: enum {
+	Node_t :: enum {
 	    Inside  = 0,
 	    Inlet   = 1,
 	    Outlet  = 2,
 	    Outside = 3,
 	};
 
+	num_inlets := 0;
 	for node, i in nodes {
-		if Node(node.t) == Node.Inlet {
+		if Node_t(node.t) == Node_t.Inlet {
 			queue[stop] = i;
 			old_to_new[i] = stop;
 			used[i] = true;
 			stop += 1;
+			num_inlets += 1;
 		}
 	}
 
@@ -606,18 +709,20 @@ save_network :: proc(links: []Link, nodes: []Node, points: []Point) {
 		start += 1;
 
 		// inlets special case
-		if (Node(node.t) == Node.Inlet) {
+		if (Node_t(node.t) == Node_t.Inlet) {
 			queue[stop] = cast(int)node_neighbours2[i][0];
 			old_to_new[node_neighbours2[i][0]] = stop;
 			used[node_neighbours2[i][0]] = true;
 			stop += 1;
+			//fmt.println(node_neighbours2[i]);
 			continue;
 		}
 
+		//fmt.println(node_neighbours2[i]);
 		for j in 0..3 {
 			if used[node_neighbours2[i][j]] do continue;
 			
-			if Node(nodes[node_neighbours2[i][j]].t) == Node.Outlet do continue;
+			if Node_t(nodes[node_neighbours2[i][j]].t) == Node_t.Outlet do continue;
 			
 			queue[stop] = cast(int)node_neighbours2[i][j];
 			old_to_new[node_neighbours2[i][j]] = stop;
@@ -626,8 +731,11 @@ save_network :: proc(links: []Link, nodes: []Node, points: []Point) {
 		}
 	}
 
+
+	num_outlets := 0;
 	for node, i in nodes {
-		if Node(node.t) == Node.Outlet {
+		if Node_t(node.t) == Node_t.Outlet {
+			num_outlets += 1;
 			queue[stop] = i;
 			old_to_new[i] = stop;
 			used[i] = true;
@@ -635,15 +743,23 @@ save_network :: proc(links: []Link, nodes: []Node, points: []Point) {
 		}
 	}
 
+	fmt.println(stop);
+	fmt.println(num_nodes, num_inlets, num_outlets, num_links);
+
 	for node, i in nodes {
-		fmt.println(i, queue[i], Node(nodes[queue[i]].t), Node(nodes[i].t), old_to_new[i]);
+		//fmt.println(i, queue[i], Node(nodes[queue[i]].t), Node(nodes[i].t), old_to_new[i]);
+		//fmt.println(i, old_to_new[i]);
 	}
 
+	/*
 	for i in 0..num_nodes {
-		fmt.println(i, old_to_new[i], queue[i], old_to_new[queue[i]], queue[old_to_new[i]]);
+		fmt.println("1", i);
+		fmt.println("2", old_to_new[i]);
+		fmt.println("3", queue[i]);
+		fmt.println("4", old_to_new[queue[i]]);
+		fmt.println("5", queue[old_to_new[i]]);
 	}
-
-	//if true do return;
+	*/
 	
 
 
@@ -690,6 +806,10 @@ save_network :: proc(links: []Link, nodes: []Node, points: []Point) {
 		node_back[i] = cast(i32)old_to_new[back];
 		link_type[i] = link.t;
 
+		if i == 470 || i == 471 {
+			fmt.println(i, links[i], nodes[front], nodes[back]);
+		}
+
 		dx := nodes[front].x - nodes[back].x;
 		dy := nodes[front].y - nodes[back].y;
 		dr := math.sqrt(dx*dx + dy*dy);
@@ -719,8 +839,44 @@ save_network :: proc(links: []Link, nodes: []Node, points: []Point) {
 
 			//fmt.println(i, math.sqrt(V/L/(math.PI)), A/L, A/L/0.1, L);
 			link_radius[i] = A/L/2.0;
+
+			
+
+			//fmt.println(i, L, A/L);
 		}
 	}
+	C := make([][6]f64, 2*num_links);
+	c1 := C[..num_links];
+	c2 := C[num_links..];
+	//fmt.println("cR := [...][5]f64 {\n");
+	for i in 0..num_links {
+		ts, points_regression, coeffs, coeffs3 := coeffs_from_link(links, nodes, points, i);
+
+		c1[i] = [6]f64 {coeffs[0]*(54/1000.0), coeffs[1]*(54/1000.0), coeffs[2]*(54/1000.0), coeffs[3]*(54/1000.0), coeffs[4]*(54/1000.0), 1.0e9};
+		c2[i] = [6]f64 {coeffs3[0]*(54/1000.0), coeffs3[1]*(54/1000.0), coeffs3[2]*(54/1000.0), coeffs3[3]*(54/1000.0), coeffs3[4]*(54/1000.0), 0.0};
+
+		for j in 0...100 {
+			x := f64(j)/100.0;
+			R := c1[i][0] + c1[i][1]*x + c1[i][2]*x*x + c1[i][3]*x*x*x + c1[i][4]*x*x*x*x;
+			//fmt.println(i, c1[i], c2[i], x, R);
+			c1[i][5] = min(R, c1[i][5]);
+		}
+		fmt.println(i, c1[i]);
+		
+
+		//fmt.printf("    {%.16f, %.16f, %.16f, %.16f, %.16f}, \n", coeffs[0]*(54/1000.0), coeffs[1]*(54/1000.0), coeffs[2]*(54/1000.0), coeffs[3]*(54/1000.0), coeffs[4]*(54/1000.0));
+	}
+	os.write_entire_file("coeffs.bin", mem.slice_ptr(cast(^u8)&C[0][0], 6*8*num_links*2));
+	//fmt.println("};\n");
+
+	/*
+	fmt.println("cr := [...][5]f64 {\n");
+	for i in 0..num_links {
+		ts, points_regression, coeffs, coeffs3 := coeffs_from_link(links, nodes, points, i);
+		fmt.printf("    {%.16f, %.16f, %.16f, %.16f, %.16f}, \n", coeffs3[0]*(54/1000.0), coeffs3[1]*(54/1000.0), coeffs3[2]*(54/1000.0), coeffs3[3]*(54/1000.0), coeffs3[4]*(54/1000.0));
+	}
+	fmt.println("};\n");
+	*/
 
     o0  := size_of(NetworkHeader); // num_neighbours
     o1  := o0 + size_of(i32)*int(num_nodes);    // node_neighbours
@@ -758,7 +914,7 @@ save_network :: proc(links: []Link, nodes: []Node, points: []Point) {
 		Lz = Lz,
 	};
 
-	os.write_entire_file("test_network.bin", data);
+	//os.write_entire_file("test_network2.bin", data);
 
 	//header := NetworkHeader{checksum = flow_io_adler32()}
 
@@ -848,10 +1004,12 @@ when ODIN_OS == "linux" {
 
 foreign m {
 	acos :: proc(x: f64) -> f64  #link_name "acos" ---;
+	atan :: proc(x: f64) -> f64  #link_name "atan" ---;
+	atan2 :: proc(y, x: f64) -> f64  #link_name "atan2" ---;
 }
 
 
-coeffs_from_link :: proc(links: []Link, nodes: []Node, points: []Point, chosen_link: int) -> [5]f64 {
+coeffs_from_link :: proc(links: []Link, nodes: []Node, points: []Point, chosen_link: int) -> ([5]f64, [5]Vec2d, [5]f64, [5]f64) {
 	R := cast(f64)links[chosen_link].Cr;
 
 	A := Vec2d{cast(f64)nodes[links[chosen_link].back].x, cast(f64)nodes[links[chosen_link].back].y};
@@ -873,55 +1031,138 @@ coeffs_from_link :: proc(links: []Link, nodes: []Node, points: []Point, chosen_l
 		OC := math.norm0(C - O);
 
 		a2 := acos(OA.x*OC.x + OA.y*OC.y);
-		aa := acos(OA.x*1.0 + OA.y*0.0);
-		aaa := acos(OC.x*1.0 + OC.y*0.0);
-		if OA.y < 0 do aa = 2.0*math.PI - aa;
-		if OC.y < 0 do aaa = 2.0*math.PI - aaa;
+		aa := atan2(OA.y, OA.x);
+		aa2 := atan2(OC.y, OC.x);
+
+		if math.mag(O + R*Vec2d{math.cos(aa + a2), math.sin(aa + a2)} - C) > 0.01 do a2 *= -1;
+
+		min_t := 2.0;
+		min_r := 10000.0;
+		for i in 0..100 {
+			t := f64(i)/99.0;
+			p := O + R*Vec2d{math.cos(aa + a2*t), math.sin(aa + a2*t)};
+			r := max(math.mag(p - P2) - R2, math.mag(p - P1) - R1);
+
+			if r < min_r {
+				min_t = t;
+				min_r = r;
+			}
+		}
+
+		if min_t > 0.0001 && min_t < 0.9999 do ts[2] = min_t;
 
 		for i in 0..5 {
-			ps[i] = O + R*Vec2d{math.cos(min(aa, aaa) + a2*ts[i]), math.sin(min(aa, aaa) + a2*ts[i])};
-			rs[i] = ((math.mag(ps[i] - P2) - R2) + (math.mag(ps[i] - P1) - R1))/2.0;
+			ps[i] = O + R*Vec2d{math.cos(aa + a2*ts[i]), math.sin(aa + a2*ts[i])};
+			rs[i] = max(math.mag(ps[i] - P2) - R2, math.mag(ps[i] - P1) - R1);
 		}
 
-		if math.mag(ps[0] - A) < 1.0e-0 {
-
-		} else if math.mag(ps[0] - C) < 1.0e-0 {
-			ps[0], ps[1], ps[3], ps[4] = ps[4], ps[3], ps[1], ps[0];
-			rs[0], rs[1], rs[3], rs[4] = rs[4], rs[3], rs[1], rs[0];
-		} else {
-			assert(true);
-			fmt.println("ERROR");
-		}
 	} else {
+		min_t := 2.0;
+		min_r := 10000.0;
+		for i in 0..100 {
+			t := f64(i)/99.0;
+			p := A + (C - A)*t;
+			r := max(math.mag(p - P2) - R2, math.mag(p - P1) - R1);
+
+			if r < min_r {
+				min_t = t;
+				min_r = r;
+			}
+		}
+
+		if min_t > 0.0001 && min_t < 0.9999 do ts[2] = min_t;
+
 		for i in 0..5 {
 			ps[i] = A + (C - A)*ts[i];
-			rs[i] = ((math.mag(ps[i] - P2) - R2) + (math.mag(ps[i] - P1) - R1))/2.0;
+			rs[i] = max(math.mag(ps[i] - P2) - R2, math.mag(ps[i] - P1) - R1);
 		}
 	}
 
+	rs2: [5]f64;
+	for i in 0..5 {
+		p := ps[i];
+		R := rs[i];
+
+		p1 := P1;
+		p2 := P2;
+
+		q1 := p1 + math.norm0(p - p1)*(math.mag(p - p1) - rs[i]);
+		q2 := p2 + math.norm0(p - p2)*(math.mag(p - p2) - rs[i]);
+
+		rs2[i] = math.mag(q2 - q1)/2.0;
+	}
+
+
 	a := f32(rs[0]);
-	M := math.Mat4{
+	a2 := f32(rs2[0]);
+	M: math.Mat4;
+	for j in 0..4 {
+		for i in 0..4 {
+			M[i][j] = cast(f32)math.pow(cast(f64)ts[i+1], f64(j)+1);
+		}
+	}
+
+	/*
+	M = math.Mat4{
 		{1.0/4.0,  1.0/16.0,  1.0/64.0,   1.0/256.0},
 		{2.0/4.0,  4.0/16.0,  8.0/64.0,  16.0/256.0},
 		{3.0/4.0,  9.0/16.0, 27.0/64.0,  81.0/256.0},
 		{4.0/4.0, 16.0/16.0, 64.0/64.0, 256.0/256.0},
 	};
+	*/
 	b := math.Vec4{
 		f32(rs[1]) - a, 
 		f32(rs[2]) - a, 
 		f32(rs[3]) - a, 
 		f32(rs[4]) - a,
 	};
+	b2 := math.Vec4{
+		f32(rs2[1]) - a2, 
+		f32(rs2[2]) - a2, 
+		f32(rs2[3]) - a2, 
+		f32(rs2[4]) - a2,
+	};
 
 	coeffs := math.mul(math.inverse(M), b);
+	coeffs2 := math.mul(math.inverse(M), b2);
+
+	rs3: [5]f64;
+	for i in 0..5 {
+		A := cast(f64)a;
+		B := cast(f64)coeffs[0];
+		C := cast(f64)coeffs[1];
+		D := cast(f64)coeffs[2];
+		E := cast(f64)coeffs[3];
+
+		A2 := cast(f64)a2;
+		B2 := cast(f64)coeffs2[0];
+		C2 := cast(f64)coeffs2[1];
+		D2 := cast(f64)coeffs2[2];
+		E2 := cast(f64)coeffs2[3];
+
+		// r(x) = A + Bx + Cx² + Dx³ + Ex⁴
+		// r'(x) = B + 2Cx + 3Dx² + 4Ex³
+		// R(x) = r(x) / cos(0 - atan(r'(x)))
+		// cos(alpha(x)) = r(x)/R(x)
+		// R(x) = r(x) / cos(cos^-1(r(x)/R(x)))
+
+		t := 0.25*f64(i);
+		r := A2 + B2*t + C2*t*t + D2*t*t*t + E2*t*t*t*t;
+		R := A + B*t + C*t*t + D*t*t*t + E*t*t*t*t;
+		dr := r / math.cos(0 - acos(r/R));
+		rs3[i] = dr;
+	}
+
 	append_to_log(&temp_log, "%s", "");
 	append_to_log(&temp_log, "timesteps: %v", ts);
 	append_to_log(&temp_log, "points:    %v", ps);
-	append_to_log(&temp_log, "radii:     %v", rs);
-	append_to_log(&temp_log, "coeffs:    %v", coeffs);
+	append_to_log(&temp_log, "radii:     %v %v %v", rs, rs2, rs3);
+	append_to_log(&temp_log, "coeffs:    %f %v  %f %v", a, coeffs, a2, coeffs2);
 	append_to_log(&temp_log, "%s", "");
 
-	return [5]f64{cast(f64)a, cast(f64)coeffs[0], cast(f64)coeffs[1], cast(f64)coeffs[2], cast(f64)coeffs[3]};
+
+
+	return ts, ps, [5]f64{cast(f64)a, cast(f64)coeffs[0], cast(f64)coeffs[1], cast(f64)coeffs[2], cast(f64)coeffs[3]}, [5]f64{cast(f64)a2, cast(f64)coeffs2[0], cast(f64)coeffs2[1], cast(f64)coeffs2[2], cast(f64)coeffs2[3]};
 }
 
 inside_triangle :: proc(A, B, C: ^Point, p: ^Point) -> bool {

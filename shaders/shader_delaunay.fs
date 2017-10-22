@@ -9,6 +9,9 @@ uniform int chosen_link;
 uniform float time;
 uniform vec2 resolution;
 uniform vec4 cam_box;
+uniform int should_clear;
+uniform bool should_highlight;
+uniform vec2 mouse_pos;
 
 out vec4 color;
 
@@ -49,22 +52,25 @@ layout (std430, binding = 2) buffer link_buffer {
     Link links[];
 };
 
+#define SHADE_NONE        -1
 #define SHADE_LINK         0
 #define SHADE_CYLINDERS    1
 #define SHADE_LINK_ARC     2
 #define SHADE_LINK_CENTER  3
-#define SHADE_NODE_CENTER  4
+#define SHADE_NODE_SMALL   4
 #define SHADE_MOUSE_DISK   5
+#define SHADE_NODE_FIT     6
+#define SHADE_LINK_FIT     7
 
 void main() {
 	vec2 p = position_normalized;
-
-	if (shade_mode == SHADE_LINK) {
+	if (shade_mode == SHADE_NONE) {
+		discard;
+	} else if (shade_mode == SHADE_LINK) {
 		color = vec4(0.6, 0.8, 1.0, 1.0);
-		if      (instance_id == chosen_link)   color = vec4(1.0, 0.3, 0.3, 1.0); 
+		if      (instance_id == chosen_link && should_highlight)   color = vec4(1.0, 0.3, 0.3, 1.0); 
 		else if (links[instance_id].type == 2) color = vec4(0.2, 0.4, 0.8, 1.0);
 		else if (links[instance_id].type == 1) color = vec4(0.8, 0.4, 0.6, 1.0);
-		
 	} else if (shade_mode == SHADE_CYLINDERS) {
 		// disk
 		float r = length(p) - 1.0;
@@ -83,19 +89,23 @@ void main() {
 
 		// final color, blend with old image
 		color = vec4(c3, s);
-	} else if (shade_mode == SHADE_NODE_CENTER || shade_mode == SHADE_LINK_CENTER || shade_mode == SHADE_MOUSE_DISK) {
+	} else if (shade_mode == SHADE_NODE_SMALL || shade_mode == SHADE_LINK_CENTER || shade_mode == SHADE_MOUSE_DISK || shade_mode == SHADE_NODE_FIT || shade_mode == SHADE_LINK_FIT) {
 		// disk
 		float r = length(p) - 1.0;
 		float w = 1.5*fwidth(r);
 		float s = smoothstep(w/2.0, -w/2.0, r);
 
 		// final color, blend with old image
-		if (shade_mode == SHADE_NODE_CENTER)
+		if (shade_mode == SHADE_NODE_SMALL)
 			color = vec4(vec3(1.0, 1.0, 0.0), s);
 		else if (shade_mode == SHADE_LINK_CENTER)
 			color = vec4(vec3(1.0, 0.0, 1.0), s);
 		else if (shade_mode == SHADE_MOUSE_DISK)
-			color = vec4(0.25, 0.25, 1.0, s*0.5);
+			color = vec4(0.25, 0.25, 1.0, should_clear == 0 ? s : s*0.5);
+		else if (shade_mode == SHADE_NODE_FIT)
+			color = vec4(1.0, 1.0, 0.0, s*0.5);
+		else if (shade_mode == SHADE_LINK_FIT)
+			color = vec4(1.0, 0.0, 1.0, s*0.5);
 	} else if (shade_mode == SHADE_LINK_ARC) {
 		Link l = links[instance_id];
 		if (l.R > 6.6e4) {
@@ -115,7 +125,7 @@ void main() {
 		} else {
 
 			// vector from the circle origin to the middle of the arc
-			vec2 up = vec2(l.U);
+			vec2 up = vec2(l.U);		
 
 			// cos(angle/2.0), where `angle` is the full arc length
 			double c = (l.c);

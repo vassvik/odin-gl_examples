@@ -22,7 +22,7 @@ main :: proc() {
 
     gl.ClearColor(1.0, 1.0, 1.0, 1.0);
 
-    if !font.init("extra/font_3x1.bin", "shaders/shader_font.vs", "shaders/shader_font.fs", set_proc_address) do return;  
+    if !font.init("extra/font_3x1.bin", "shaders/shader_font.vs", "shaders/shader_font.fs") do return;  
     
     defer font.cleanup();
 
@@ -47,17 +47,24 @@ main :: proc() {
         str_colors: [len(str)]u16;
         for i in 0..len(str) do str_colors[i] = u16(i)&3;
 
-        t2 := glfw.GetTime();
 
-        y_pos : f32 = 0.0;
-        font.draw_string(0.0, y_pos, 20.0, str);                               y_pos += 20.0; // unformatted string with implicit palette index passing (implicit 0)
-        font.draw_string(0.0, y_pos, 28.0, 3, str);                            y_pos += 28.0; // unformatted string with explicit palette index passing
-        font.draw_string(0.0, y_pos, 24.0, str_colors[..], str);               y_pos += 24.0; // unformatted string with explicit palette index passing for the whole string
-        font.draw_string(0.0, y_pos, 32.0, 2, str);                            y_pos += 32.0; // unformatted string with explicit palette index passing
-        font.draw_format(0.0, y_pos, 16.0, "blehh %d %f: %s", 2, 3.14, str);   y_pos += 16.0; //   formatted string with implicit palette index passing (implicit 0)
-        font.draw_format(0.0, y_pos, 20.0, 1, "blah %d %f: %s", 4, 6.28, str); y_pos += 20.0; //   formatted string with explicit palette index passing
-        font.draw_format(0.0, y_pos, 40.0, 1, "frame time = %.3f", (t2 - t1)*1000.0); y_pos += 40.0; //   formatted string with explicit palette index passing
+        t2 := glfw.GetTime();
+        dt := t2 - t1;
         t1 = t2;
+        for j in 0..4 {
+            y_pos := f32(0.0);
+            for i in 0..10 {    
+                x_pos := f32(j*400.0);
+                font.draw_string(x_pos, y_pos, 12.0, str);                               y_pos += 12.0; // unformatted string with implicit palette index passing (implicit 0)
+                font.draw_string(x_pos, y_pos, 12.0, 3, str);                            y_pos += 12.0; // unformatted string with explicit palette index passing
+                font.draw_string(x_pos, y_pos, 12.0, str_colors[..], str);               y_pos += 12.0; // unformatted string with explicit palette index passing for the whole string
+                font.draw_string(x_pos, y_pos, 12.0, 2, str);                            y_pos += 12.0; // unformatted string with explicit palette index passing
+                font.draw_format(x_pos, y_pos, 12.0, "blehh %d %f: %s", 2, 3.14, str);   y_pos += 12.0; // formatted string with implicit palette index passing (implicit 0)
+                font.draw_format(x_pos, y_pos, 12.0, 1, "blah %d %f: %s", 4, 6.28, str); y_pos += 12.0; // formatted string with explicit palette index passing
+                font.draw_format(x_pos, y_pos, 12.0, 1, "frame time = %.3f", dt*1000.0); y_pos += 12.0; // formatted string with explicit palette index passing
+            }
+        }
+
         glfw.SwapBuffers(window);
     }
 }
