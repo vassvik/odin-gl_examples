@@ -6,11 +6,24 @@ import "core:math.odin";
 import "shared:odin-glfw/glfw.odin";
 import "shared:odin-gl/gl.odin";
 import "shared:odin-gl_font/font.odin";
-
+using import "shared:random.odin";
 
 scroll_x := 0.0;
 scroll_y := 0.0;
 
+Node_t :: enum {
+    Inside  = 0,
+    Inlet   = 1,
+    Outlet  = 2,
+    Outside = 3,
+};
+
+Link_t :: enum {
+    Inside  = 0,
+    Inlet   = 1,
+    Outlet  = 2,
+    Outside = 3,
+};
 
 append_to_log :: proc(log: ^$T/[dynamic]string, fmt_string: string, vals: ...any) {
 	a := fmt.aprintf(fmt_string, ...vals);
@@ -40,7 +53,7 @@ main :: proc() {
 	glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, 5);
 	glfw.WindowHint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE);
 
-	resx, resy := 1920.0, 1000.0;
+	resx, resy := 1000.0, 1000.0;
 	window := glfw.CreateWindow(i32(resx), i32(resy), "Odin Delaunay ", nil, nil);
 	if window == nil do return;
 
@@ -54,6 +67,7 @@ main :: proc() {
 	}
 	gl.load_up_to(4, 5, set_proc_address);
 
+
 	if !font.init("extra/font_3x1.bin", "shaders/shader_font.vs", "shaders/shader_font.fs") do return;  
 
 	// load shaders
@@ -66,8 +80,6 @@ main :: proc() {
 	for uniform, name in uniforms {
 		fmt.println(name, uniform);
 	}
-
-
 
 	points, nodes, links := load_from_file("extra/stuff.bin");
 	if points == nil {
@@ -114,6 +126,12 @@ main :: proc() {
 	dy : f32 = 400.0;
 	dx : f32 = dy*f32(resx/resy);
 
+	x = f32(min_x);
+	y = f32(min_y);
+
+	dx, dy = cast(f32)max(max_x - min_x, max_y - min_y)*f32(resx)/f32(resy), cast(f32)max(max_x - min_x, max_y - min_y);
+
+
 	F5_prev : i32 = 0;
 	TAB_prev : i32 = 0;
 	F_prev : i32 = 0;
@@ -150,18 +168,63 @@ main :: proc() {
 	enable_vsync := true;
 	glfw.SwapInterval(cast(i32)enable_vsync);
 
+
 	num_points := len(points);
 	num_nodes := len(nodes);
 	num_links := len(links);
 
-	buf_points, buf_links, buf_nodes: u32;
+
+
+	links_dynamic := make([]Links_Dynamic, num_links);
+	defer free(links_dynamic);	
+	
+	StateHeader :: struct #ordered {
+	    network_checksum: u32,
+	    state_checksum: u32,
+	    num_links: i32,
+	    max_bubbles: i32,
+	    total_bubbles: i32,
+	    flow_mode: i32,
+	    size: i32,
+	    timestep: i32,
+	    delta_time: f64,
+	    time: f64,
+	    porevolume: f64,
+	    pressure: f64,
+	    total_flowrate: f64,
+	}
+
+	state_data, success_data := os.read_entire_file("state_3.bin");
+	defer free(state_data);
+
+	state_header := (cast(^StateHeader)&state_data[0])^;
+
+	num_bubbles := mem.slice_ptr(cast(^i32)&state_data[size_of(StateHeader)+3*8*num_links], num_links);
+	bubble_positions := mem.slice_ptr(cast(^f64)&state_data[size_of(StateHeader)+3*8*num_links+4*num_links], int(state_header.total_bubbles*2));
+
+	ctr := 0;
+	for i in 0..num_links {
+		links_dynamic[i].num_bubbles = num_bubbles[i];
+		for j in 0..num_bubbles[i] {
+			links_dynamic[i].bubbles_start[j] = cast(f32)bubble_positions[ctr];
+			links_dynamic[i].bubbles_stop[j] = cast(f32)bubble_positions[ctr+1];
+			ctr += 2;
+		}
+	}
+
+
+
+
+	buf_points, buf_links, buf_nodes, buf_links_dynamic: u32;
 	gl.CreateBuffers(1, &buf_points);
 	gl.CreateBuffers(1, &buf_nodes);
 	gl.CreateBuffers(1, &buf_links);
+	gl.CreateBuffers(1, &buf_links_dynamic);
 	defer {
 		gl.DeleteBuffers(1, &buf_points);
 		gl.DeleteBuffers(1, &buf_nodes);
 		gl.DeleteBuffers(1, &buf_links);
+		gl.DeleteBuffers(1, &buf_links_dynamic);
 	}
 
 	draw_states := [10]bool{true, true, true, true, true, true, true, false, false, true};
@@ -169,48 +232,17 @@ main :: proc() {
 	gl.BindBufferBase(gl.SHADER_STORAGE_BUFFER, 0, buf_points);
 	gl.BindBufferBase(gl.SHADER_STORAGE_BUFFER, 1, buf_nodes);
 	gl.BindBufferBase(gl.SHADER_STORAGE_BUFFER, 2, buf_links);
+	gl.BindBufferBase(gl.SHADER_STORAGE_BUFFER, 3, buf_links_dynamic);
 
 	gl.NamedBufferData(buf_points, size_of(Point)*num_points, &points[0], gl.STATIC_DRAW);
 	gl.NamedBufferData(buf_nodes,  size_of(Node)*num_nodes,   &nodes[0],  gl.STATIC_DRAW);
 	gl.NamedBufferData(buf_links,  size_of(Link)*num_links,   &links[0],  gl.STATIC_DRAW);
+	gl.NamedBufferData(buf_links_dynamic,  size_of(Links_Dynamic)*num_links,   &links_dynamic[0],  gl.STATIC_DRAW);
 
 	lengths := make([]f64, len(links));
 	sorted_by_length := make([]int, len(links));
 
 	for link, i in links {
-		/*
-		dx := nodes[link.front].x - nodes[link.back].x;
-		dy := nodes[link.front].y - nodes[link.back].y;
-		dr := math.sqrt(dx*dx + dy*dy);
-		L := cast(f64)dr*(54.0/1000.0);
-
-		A := math.Vec2{points[link.left].x, points[link.left].y};
-		B := math.Vec2{nodes[link.front].x, nodes[link.front].y};
-		C := math.Vec2{nodes[link.back].x, nodes[link.back].y};
-		D := math.Vec2{points[link.right].x, points[link.right].y};
-
-		rA := cast(f64)points[link.left].r;
-		rD := cast(f64)points[link.right].r;
-
-		A1 := f64(0.5*abs( (B.x - A.x)*(C.y - A.y) - (C.x - A.x)*(B.y - A.y) ));
-		A2 := f64(0.5*abs( (B.x - D.x)*(C.y - D.y) - (C.x - D.x)*(B.y - D.y) ));
-
-		c1 := cast(f64)math.dot(math.norm0(B - A), math.norm0(C - A));
-		c2 := cast(f64)math.dot(math.norm0(B - D), math.norm0(C - D));
-
-		{
-			A1 = A1 - f64(math.PI*rA*rA)*(acos(c1)/(2.0*math.PI));
-			A2 = A2 - f64(math.PI*rD*rD)*(acos(c2)/(2.0*math.PI));
-			A := (A1 + A2)*(54.0/1000.0)*(54.0/1000.0);
-			
-			V := A*0.1;
-			//L := link_length[i];
-
-			fmt.println(i, math.sqrt(V/L/(math.PI)), A/L, A/L/0.1, L);
-			lengths[i] = A/L/2.0;
-		}
-		*/
-
 		lengths[i] = cast(f64)math.mag(nodes[link.front].xy - nodes[link.back].xy);
 		sorted_by_length[i] = i;
 	}
@@ -228,15 +260,91 @@ main :: proc() {
 
 	}
 
-	//fmt.println(lengths);
-	fmt.println(lengths[len(lengths)-1]);
-
 	current_link := 0;
 
 	t1 := glfw.GetTime();
 
 	should_clear := true;
 	theta := 0.0;
+
+
+	max_viewport_dims, max_framebuffer_width, max_framebuffer_height: i32;
+	gl.GetIntegerv(gl.MAX_VIEWPORT_DIMS, &max_viewport_dims);
+	gl.GetIntegerv(gl.MAX_FRAMEBUFFER_WIDTH, &max_framebuffer_width);
+	gl.GetIntegerv(gl.MAX_FRAMEBUFFER_HEIGHT, &max_framebuffer_height);
+	fmt.println(max_viewport_dims, max_framebuffer_width, max_framebuffer_height);
+
+	render_resx, render_resy: i32 = 8192/4, 8192/4;
+
+	screen_texture: u32;
+	gl.GenTextures(1, &screen_texture);
+	gl.BindTexture(gl.TEXTURE_2D, screen_texture);
+
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+	gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, cast(i32)render_resx, cast(i32)render_resy, 0, gl.RGBA, gl.UNSIGNED_BYTE, nil);
+
+	framebuffer: u32;
+	gl.GenFramebuffers(1, &framebuffer);
+	gl.BindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+	gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, screen_texture, 0);
+
+	buffers := [1]u32{ gl.COLOR_ATTACHMENT0 };
+	gl.DrawBuffers(1, &buffers[0]);
+
+
+	status := gl.CheckFramebufferStatus(gl.FRAMEBUFFER);
+	if status != gl.FRAMEBUFFER_COMPLETE do fmt.printf("ERR framebuffers: %d\n", status); 
+	gl.BindFramebuffer(gl.FRAMEBUFFER, 0);
+
+	// the quad spanned by the left, back, right and front vertices tesselate the whole system
+	total_area := 0.0;
+	for _, i in links {
+		using link := links[i];
+		// area triangle = abs(Ax*(By - Cy) + Bx*(Cy - Ay) + Cx*(Ay - By))/2;
+		
+		A := nodes[back].xy;
+		B := nodes[front].xy;
+		C := points[left].xy;
+		D := points[right].xy;
+
+		A1 := abs(A.x*(B.y - C.y) + B.x*(C.y - A.y) + C.x*(A.y - B.y))/2.0;
+		A2 := abs(A.x*(B.y - D.y) + B.x*(D.y - A.y) + D.x*(A.y - B.y))/2.0;
+
+		total_area += f64(A1 + A2);
+	}
+
+	cylinder_area := 0.0;
+	for _, i in points {
+		using point := points[i];
+		cylinder_area += math.PI*f64(r*r);
+	}
+
+	pore_area := total_area - cylinder_area;
+
+
+
+	// convert from pixel area to millimeters^2
+	area_factor := (54.0/1000.0)*(54.0/1000.0);
+	total_area *= area_factor;
+	cylinder_area *= area_factor;
+	pore_area *= area_factor;
+
+	// multiply by height in millimeters to get volume
+	total_volume := total_area * 0.1;
+	cylinder_volume := cylinder_area * 0.1;
+	pore_volume := pore_area * 0.1;
+
+	// convert from mm^3 to mL
+	volume_factor := 0.001;
+	total_volume *= volume_factor;
+	cylinder_volume *= volume_factor;
+	pore_volume *= volume_factor;
+
+	fmt.printf("total volume = %f, pore volume = %f, porosity = %f\n", total_volume, pore_volume, pore_volume/total_volume);
+
+
 
 	for glfw.WindowShouldClose(window) == glfw.FALSE {
 		for _, i in temp_log do free(temp_log[i]);
@@ -516,14 +624,6 @@ main :: proc() {
 			y = d.y - dy/2.0;
 		}
 
-
-		
-
-		if (key_states[glfw.KEY_F] == 1) {
-			fmt.println("Saving");
-			save_network(links, nodes, points);
-		}
-
 		for i in 0..10 {
 			if key_states[glfw.KEY_0 + i32(i)] == 1 {
 				draw_states[i] = !draw_states[i];
@@ -544,8 +644,6 @@ main :: proc() {
 		// setup shader program and uniforms
 		gl.UseProgram(program);
 		gl.Uniform1f(get_uniform_location(program, "time\x00"), f32(glfw.GetTime()));
-		gl.Uniform2f(get_uniform_location(program, "resolution\x00"), f32(resx), f32(resy));
-		gl.Uniform4f(get_uniform_location(program, "cam_box\x00"), x, y, x + dx, y + dy);   
 		gl.Uniform1i(get_uniform_location(program, "chosen_link\x00"), cast(i32)(chosen_link));   
 		gl.Uniform1i(get_uniform_location(program, "should_clear\x00"), cast(i32)(should_clear));   
 		gl.Uniform1i(get_uniform_location(program, "should_highlight\x00"), cast(i32)(draw_states[9]));   
@@ -553,73 +651,351 @@ main :: proc() {
 		gl.Uniform1f(get_uniform_location(program, "mouse_radius\x00"), cast(f32)(closest_distance));   
 
 
+
 		gl.BindVertexArray(vao); // empty
 
+		files := [...]string{
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta120_Ca1.6e+00-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta120_Ca1.6e-01-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta120_Ca1.6e-02-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta120_Ca2.9e+00-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta120_Ca2.9e-01-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta120_Ca2.9e-02-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta120_Ca5.2e-01-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta120_Ca5.2e-02-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta120_Ca5.2e-03-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta120_Ca9.2e-01-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta120_Ca9.2e-02-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta120_Ca9.2e-03-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta173_Ca1.6e+00-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta173_Ca1.6e-01-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta173_Ca1.6e-02-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta173_Ca2.9e+00-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta173_Ca2.9e-01-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta173_Ca2.9e-02-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta173_Ca5.2e-01-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta173_Ca5.2e-02-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta173_Ca5.2e-03-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta173_Ca9.2e-01-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta173_Ca9.2e-02-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta173_Ca9.2e-03-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta30_Ca1.6e+00-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta30_Ca1.6e-01-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta30_Ca1.6e-02-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta30_Ca2.9e+00-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta30_Ca2.9e-01-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta30_Ca2.9e-02-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta30_Ca5.2e-01-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta30_Ca5.2e-02-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta30_Ca5.2e-03-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta30_Ca9.2e-01-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta30_Ca9.2e-02-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta30_Ca9.2e-03-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta60_Ca1.6e+00-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta60_Ca1.6e-01-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta60_Ca1.6e-02-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta60_Ca2.9e+00-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta60_Ca2.9e-01-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta60_Ca2.9e-02-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta60_Ca5.2e-01-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta60_Ca5.2e-02-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta60_Ca5.2e-03-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta60_Ca9.2e-01-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta60_Ca9.2e-02-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta60_Ca9.2e-03-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta90_Ca1.6e+00-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta90_Ca1.6e-01-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta90_Ca1.6e-02-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta90_Ca2.9e+00-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta90_Ca2.9e-01-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta90_Ca2.9e-02-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta90_Ca5.2e-01-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta90_Ca5.2e-02-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta90_Ca5.2e-03-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta90_Ca9.2e-01-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta90_Ca9.2e-02-0.bin",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta90_Ca9.2e-03-0.bin",
+		};
+		output := [...]string{
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta120_Ca1.6e+00-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta120_Ca1.6e-01-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta120_Ca1.6e-02-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta120_Ca2.9e+00-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta120_Ca2.9e-01-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta120_Ca2.9e-02-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta120_Ca5.2e-01-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta120_Ca5.2e-02-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta120_Ca5.2e-03-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta120_Ca9.2e-01-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta120_Ca9.2e-02-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta120_Ca9.2e-03-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta173_Ca1.6e+00-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta173_Ca1.6e-01-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta173_Ca1.6e-02-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta173_Ca2.9e+00-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta173_Ca2.9e-01-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta173_Ca2.9e-02-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta173_Ca5.2e-01-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta173_Ca5.2e-02-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta173_Ca5.2e-03-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta173_Ca9.2e-01-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta173_Ca9.2e-02-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta173_Ca9.2e-03-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta30_Ca1.6e+00-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta30_Ca1.6e-01-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta30_Ca1.6e-02-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta30_Ca2.9e+00-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta30_Ca2.9e-01-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta30_Ca2.9e-02-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta30_Ca5.2e-01-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta30_Ca5.2e-02-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta30_Ca5.2e-03-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta30_Ca9.2e-01-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta30_Ca9.2e-02-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta30_Ca9.2e-03-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta60_Ca1.6e+00-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta60_Ca1.6e-01-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta60_Ca1.6e-02-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta60_Ca2.9e+00-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta60_Ca2.9e-01-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta60_Ca2.9e-02-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta60_Ca5.2e-01-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta60_Ca5.2e-02-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta60_Ca5.2e-03-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta60_Ca9.2e-01-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta60_Ca9.2e-02-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta60_Ca9.2e-03-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta90_Ca1.6e+00-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta90_Ca1.6e-01-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta90_Ca1.6e-02-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta90_Ca2.9e+00-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta90_Ca2.9e-01-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta90_Ca2.9e-02-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta90_Ca5.2e-01-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta90_Ca5.2e-02-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta90_Ca5.2e-03-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta90_Ca9.2e-01-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta90_Ca9.2e-02-0.bmp",
+			"/home/vassvik/hg/flow_reboot/run_gather/states/theta90_Ca9.2e-03-0.bmp",
+		};
+
+
+
+		if (key_states[glfw.KEY_F] == 1) {
+			data := make([]u8, 3*render_resx*render_resy);
+			defer free(data);
+
+			for filename, l in files {
+				fmt.println("Reading file", filename);
+				state_data, success_data := os.read_entire_file(filename);
+				defer free(state_data);
+
+				if !success_data {
+					fmt.println("Could not read file", filename);
+					continue;
+				}
+
+
+				state_header := (cast(^StateHeader)&state_data[0])^;
+
+				num_bubbles := mem.slice_ptr(cast(^i32)&state_data[size_of(StateHeader)+3*8*num_links], num_links);
+				bubble_positions := mem.slice_ptr(cast(^f64)&state_data[size_of(StateHeader)+3*8*num_links+4*num_links], int(state_header.total_bubbles*2));
+
+				ctr := 0;
+				for i in 0..num_links {
+					links_dynamic[i].num_bubbles = num_bubbles[i];
+					for j in 0..num_bubbles[i] {
+						links_dynamic[i].bubbles_start[j] = cast(f32)bubble_positions[ctr];
+						links_dynamic[i].bubbles_stop[j] = cast(f32)bubble_positions[ctr+1];
+						ctr += 2;
+					}
+				}
+
+				gl.NamedBufferSubData(buf_links_dynamic,  0, size_of(Links_Dynamic)*num_links,   &links_dynamic[0]);
+
+				fmt.println("Rendering");
+
+				t1 := glfw.GetTime();
+				gl.BindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+				gl.Clear(gl.COLOR_BUFFER_BIT);
+				gl.Viewport(0, 0, render_resx, render_resy);
+
+				gl.Uniform2f(get_uniform_location(program, "resolution\x00"), f32(render_resx), f32(render_resy));
+				gl.Uniform4f(get_uniform_location(program, "cam_box\x00"), x, y, x + dx, y + dy);   
+		
+				for i in 0..(should_clear ? 1 : 2) {
+			        // light blue links (background)
+			        gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), i32(draw_states[1+0] ? 0 : -1));
+			        gl.Uniform1i(get_uniform_location(program, "shade_mode\x00"), i32(draw_states[1+0] ? 0 : -1));
+			        if should_clear do gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, cast(i32)num_links);
+			        
+			        // green disks
+			        gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), i32(draw_states[1+1] ? 1 : -1));
+			        gl.Uniform1i(get_uniform_location(program, "shade_mode\x00"), i32(draw_states[1+1] ? 1 : -1));
+			        gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, cast(i32)num_points);
+				}
+				gl.Flush();
+				t2 := glfw.GetTime();
+
+				save_bmp :: proc(filename: string, render_width, render_height: i32, data: []u8) {
+					BMP_Header :: struct #packed {
+						signature:         u16 = 0x4D42,
+						size_file:         u32,
+						_:                 u16 = 0,
+						_:                 u16 = 0,
+						offset:            u32 = 54,
+						header_size:       u32 = 40,
+						width:             u32,
+						height:            u32,
+						planes:            u16 = 1,
+						bits_per_pixel:    u16,
+						compression:       u32 = 0,
+						size_image:        u32,
+						hppm:              u32 = 0,
+						vppm:              u32 = 0,
+						num_colors:        u32 = 0,
+						important_colors:  u32 = 0,
+					};
+
+					using header: BMP_Header;
+					width = cast(u32)render_width;
+					height = cast(u32)render_height;
+					bits_per_pixel = 24;
+					size_image = width*height*u32(bits_per_pixel)/8;
+					size_file = size_of(BMP_Header) + size_image;
+					
+					data_all := make([]u8, 54+size_image);
+					(cast(^BMP_Header)&data[0])^ = header;
+
+					copy(data_all[54..], data[..]);
+
+					success := os.write_entire_file(filename, data[..]);
+					fmt.println(success, size_of(BMP_Header), header);
+
+
+				}
+
+				fmt.println("Saving");
+				//save_network(links, nodes, points);
+
+				t3 := glfw.GetTime();
+				
+
+				gl.BindFramebuffer(gl.READ_FRAMEBUFFER, framebuffer);
+				gl.ReadBuffer(gl.COLOR_ATTACHMENT0);
+				gl.ReadPixels(0, 0, render_resx, render_resy, gl.BGR, gl.UNSIGNED_BYTE, &data[0]);
+				gl.BindFramebuffer(gl.READ_FRAMEBUFFER, 0);
+				t4 := glfw.GetTime();
+				save_bmp(output[l], render_resx, render_resy, data[..]);
+				t5 := glfw.GetTime();
+
+	
+				fmt.println("Calculating fractal dimensions");				
+
+				for k in 0..uint(15) {
+					d := 1 << k;
+					n := int(render_resx)/d;
+
+					count := 0;
+					for j in 0..n {
+						for i in 0..n {
+							found := false;
+							inner: for J in 0..d {
+								for I in 0..d {
+									z := (j*d + J)*int(render_resx) + (i*d + I);
+									if data[3*z] > 250 && data[3*z] < 255 {
+										found = true;
+										break inner;
+									}
+								}
+							}
+							count += found ? 1 : 0;
+						}
+					}
+					fmt.println(d, count);
+				}
+
+				t6 := glfw.GetTime();
+
+
+				fmt.printf("Time to render = %.3f ms\n", 1000*(t2-t1));
+				fmt.printf("Time to copy = %.3f ms\n", 1000*(t4-t3));
+				fmt.printf("Time to save = %.3f ms\n", 1000*(t5-t4));
+				fmt.printf("Time to calculate = %.3f ms\n", 1000*(t6-t5));
+		        
+			}
+		}
+
+		gl.BindFramebuffer(gl.FRAMEBUFFER, 0);
+		gl.Viewport(0, 0, cast(i32)resx, cast(i32)resy);
+
+		gl.Uniform2f(get_uniform_location(program, "resolution\x00"), f32(resx), f32(resy));
+		gl.Uniform4f(get_uniform_location(program, "cam_box\x00"), x, y, x + dx, y + dy);   
 
 		for i in 0..(should_clear ? 1 : 2) {
+	        // light blue links (background)
+	        gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), i32(draw_states[1+0] ? 0 : -1));
+	        gl.Uniform1i(get_uniform_location(program, "shade_mode\x00"), i32(draw_states[1+0] ? 0 : -1));
+	        if should_clear do gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, cast(i32)num_links);
+	        
+	        // green disks
+	        gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), i32(draw_states[1+1] ? 1 : -1));
+	        gl.Uniform1i(get_uniform_location(program, "shade_mode\x00"), i32(draw_states[1+1] ? 1 : -1));
+	        gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, cast(i32)num_points);
 			
-        // light blue links (background)
-        gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), i32(draw_states[1+0] ? 0 : -1));
-        gl.Uniform1i(get_uniform_location(program, "shade_mode\x00"), i32(draw_states[1+0] ? 0 : -1));
-        if should_clear do gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, cast(i32)num_links);
-        
-        // green disks
-        gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), i32(draw_states[1+1] ? 1 : -1));
-        gl.Uniform1i(get_uniform_location(program, "shade_mode\x00"), i32(draw_states[1+1] ? 1 : -1));
-        gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, cast(i32)num_points);
-		
-        // black link arc
-        gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), i32(draw_states[1+2] ? 2 : -1));
-        gl.Uniform1i(get_uniform_location(program, "shade_mode\x00"), i32(draw_states[1+2] ? 2 : -1));
-        if should_clear do gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, cast(i32)num_links);
-        
-        // purple disk at edge connecting two green disks
-        gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), i32(draw_states[1+3] ? 3 : -1));
-        gl.Uniform1i(get_uniform_location(program, "shade_mode\x00"), i32(draw_states[1+3] ? 3 : -1));
-        if should_clear do gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, cast(i32)num_links);
+	        // black link arc
+	        gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), i32(draw_states[1+2] ? 2 : -1));
+	        gl.Uniform1i(get_uniform_location(program, "shade_mode\x00"), i32(draw_states[1+2] ? 2 : -1));
+	        if should_clear do gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, cast(i32)num_links);
+	        
+	        // purple disk at edge connecting two green disks
+	        gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), i32(draw_states[1+3] ? 3 : -1));
+	        gl.Uniform1i(get_uniform_location(program, "shade_mode\x00"), i32(draw_states[1+3] ? 3 : -1));
+	        if should_clear do gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, cast(i32)num_links);
 
-        // blue disk at mouse cursor
-		gl.Uniform1f(get_uniform_location(program, "mouse_radius\x00"), cast(f32)(closest_distance));   
-        gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), i32(draw_states[1+5] ? 5 : -1));
-        gl.Uniform1i(get_uniform_location(program, "shade_mode\x00"), i32(draw_states[1+5] ? 5 : -1));
-        gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, cast(i32)1); 
+	        // blue disk at mouse cursor
+			gl.Uniform1f(get_uniform_location(program, "mouse_radius\x00"), cast(f32)(closest_distance));   
+	        gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), i32(draw_states[1+5] ? 5 : -1));
+	        gl.Uniform1i(get_uniform_location(program, "shade_mode\x00"), i32(draw_states[1+5] ? 5 : -1));
+	        gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, cast(i32)1); 
 
-        // purple disk at edges radius
-        gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), i32(draw_states[1+7] ? 7 : -1));
-        gl.Uniform1i(get_uniform_location(program, "shade_mode\x00"), i32(draw_states[1+7] ? 7 : -1));
-        gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, cast(i32)num_links);     
+	        // purple disk at edges radius
+	        gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), i32(draw_states[1+7] ? 7 : -1));
+	        gl.Uniform1i(get_uniform_location(program, "shade_mode\x00"), i32(draw_states[1+7] ? 7 : -1));
+	        gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, cast(i32)num_links);     
 
-        // yellow disk at mouse cursor
-		gl.Uniform1f(get_uniform_location(program, "mouse_radius\x00"), cast(f32)(0.25));   
-        gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), i32(draw_states[1+4] ? 5 : -1));
-        gl.Uniform1i(get_uniform_location(program, "shade_mode\x00"), i32(draw_states[1+4] ? 4 : -1));
-        gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, cast(i32)1); 
-        
-        // yellow node center disks
-        gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), i32(draw_states[1+4] ? 4 : -1));
-        gl.Uniform1i(get_uniform_location(program, "shade_mode\x00"), i32(draw_states[1+4] ? 4 : -1));
-        gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, cast(i32)num_nodes);
+	        // yellow disk at mouse cursor
+			gl.Uniform1f(get_uniform_location(program, "mouse_radius\x00"), cast(f32)(0.25));   
+	        gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), i32(draw_states[1+4] ? 5 : -1));
+	        gl.Uniform1i(get_uniform_location(program, "shade_mode\x00"), i32(draw_states[1+4] ? 4 : -1));
+	        gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, cast(i32)1); 
+	        
+	        // yellow node center disks
+	        gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), i32(draw_states[1+4] ? 4 : -1));
+	        gl.Uniform1i(get_uniform_location(program, "shade_mode\x00"), i32(draw_states[1+4] ? 4 : -1));
+	        gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, cast(i32)num_nodes);
 
-        
-        // blue disk at nodes
-        gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), i32(draw_states[1+6] ? 6 : -1));
-        gl.Uniform1i(get_uniform_location(program, "shade_mode\x00"), i32(draw_states[1+6] ? 6 : -1));
-        gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, cast(i32)num_nodes); 
+	        
+	        // blue disk at nodes
+	        gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), i32(draw_states[1+6] ? 6 : -1));
+	        gl.Uniform1i(get_uniform_location(program, "shade_mode\x00"), i32(draw_states[1+6] ? 6 : -1));
+	        gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, cast(i32)num_nodes); 
 
-  
-		colors_font := font.get_colors();
-		for i in 0..4 do colors_font[i] = font.Vec4{0.0, 0.0, 0.0, 1.0};
-		
-		font.update_colors(4);
+	  
+			colors_font := font.get_colors();
+			for i in 0..4 do colors_font[i] = font.Vec4{0.0, 0.0, 0.0, 1.0};
+			
+			font.update_colors(4);
 
-		ypos : f32 = 0.0;
-		for s in temp_log {
-			if draw_states[0] do font.draw_string(0.0, ypos,   20.0, s);
-			ypos += s == "" ? 10.0 : 20.0;
+			ypos : f32 = 0.0;
+			for s in temp_log {
+				if draw_states[0] do font.draw_string(0.0, ypos,   20.0, s);
+				ypos += s == "" ? 10.0 : 20.0;
+			}
+
+
 		}
-
 		glfw.SwapBuffers(window);
-		}
 
 	}
 }
@@ -685,12 +1061,7 @@ save_network :: proc(links: []Link, nodes: []Node, points: []Point) {
 	start := 0;
 	stop := 0;
 
-	Node_t :: enum {
-	    Inside  = 0,
-	    Inlet   = 1,
-	    Outlet  = 2,
-	    Outside = 3,
-	};
+
 
 	num_inlets := 0;
 	for node, i in nodes {
@@ -989,6 +1360,13 @@ Link :: struct #ordered {
 	t:      i32,   // type: 0, 1 (inlet) or 2 (outlet)
 };
 
+Links_Dynamic :: struct #ordered {
+	filled: i32,
+	num_bubbles: i32,
+	bubbles_start: [16]f32,
+	bubbles_stop: [16]f32,
+};
+
 
 // wrapper to use GetUniformLocation with an Odin string
 // NOTE: str has to be zero-terminated, so add a \x00 at the end
@@ -997,12 +1375,13 @@ get_uniform_location :: proc(program: u32, str: string) -> i32 {
 }
 
 when ODIN_OS == "linux" {
-	foreign_system_library m "m";
+	foreign import m "system:m";
 } else {
-	foreign_system_library m "libcmt.lib";
+	foreign import m "system:libcmt.lib";
 }
 
 foreign m {
+	log2 :: proc(x: f64) -> f64  #link_name "log2" ---;
 	acos :: proc(x: f64) -> f64  #link_name "acos" ---;
 	atan :: proc(x: f64) -> f64  #link_name "atan" ---;
 	atan2 :: proc(y, x: f64) -> f64  #link_name "atan2" ---;

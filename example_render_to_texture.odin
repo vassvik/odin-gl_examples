@@ -117,8 +117,8 @@ main :: proc() {
         return gl.GetUniformLocation(program, &str[0]);;
     }
     when ODIN_OS == "windows" {
-        last_vertex_time := os.last_write_time_by_name("shaders/shader_render_to_texture.vs");
-        last_fragment_time := os.last_write_time_by_name("shaders/shader_render_to_texture.fs");
+        last_vertex_time := os.last_write_time_by_name("shaders/shader_texture.vs");
+        last_fragment_time := os.last_write_time_by_name("shaders/shader_texture.fs");
     }
     gl.ClearColor(1.0, 1.0, 1.0, 1.0);
     for glfw.WindowShouldClose(window) == glfw.FALSE {
@@ -127,8 +127,8 @@ main :: proc() {
         glfw.PollEvents();
 
         when ODIN_OS == "windows" {
-            current_vertex_time := os.last_write_time_by_name("shaders/shader_render_to_texture.vs");
-            current_fragment_time := os.last_write_time_by_name("shaders/shader_render_to_texture.fs");
+            current_vertex_time := os.last_write_time_by_name("shaders/shader_texture.vs");
+            current_fragment_time := os.last_write_time_by_name("shaders/shader_texture.fs");
 
             if (current_vertex_time != last_vertex_time || current_fragment_time != last_fragment_time) {
                 new_program, success := gl.load_shaders("shaders/shader_render_to_texture.vs", "shaders/shader_render_to_texture.fs");

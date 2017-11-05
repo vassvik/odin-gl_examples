@@ -5,7 +5,6 @@ import "shared:odin-glfw/glfw.odin";
 import "shared:odin-gl/gl.odin";
 import "shared:odin-gl_font/font.odin";
 
-
 main :: proc() {
     resx, resy := 1600.0, 900.0;
     window, success := init_glfw(i32(resx), i32(resy), "Odin Font Rendering");

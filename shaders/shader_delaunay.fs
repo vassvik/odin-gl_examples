@@ -40,6 +40,13 @@ struct Link {
     int type;   // inside (0), inlet (1), outlet (2)
 };
 
+struct Link_Dynamic {
+	int filled;
+	int num_bubbles;
+	float bubbles_start[16];
+	float bubbles_stop[16];
+};
+
 layout (std430, binding = 0) buffer point_buffer {
     Point points[];
 };
@@ -50,6 +57,10 @@ layout (std430, binding = 1) buffer node_buffer {
 
 layout (std430, binding = 2) buffer link_buffer {
     Link links[];
+};
+
+layout (std430, binding = 3) buffer link_dynamic {
+    Link_Dynamic links_dynamic[];
 };
 
 #define SHADE_NONE        -1
@@ -63,18 +74,60 @@ layout (std430, binding = 2) buffer link_buffer {
 #define SHADE_LINK_FIT     7
 
 void main() {
+
+	vec2 position_millimeter = position_world*(54.0/1000);
+	vec2 position_mid = (cam_box.xy + cam_box.zw/2.0)*(54.0/1000);
+	position_mid.y += 1.0;
+	if (length(position_millimeter - position_mid) > 56.5) discard;
+
 	vec2 p = position_normalized;
 	if (shade_mode == SHADE_NONE) {
 		discard;
 	} else if (shade_mode == SHADE_LINK) {
 		color = vec4(0.6, 0.8, 1.0, 1.0);
+		color = vec4(1.0, 1.0, 1.0, 1.0);
 		if      (instance_id == chosen_link && should_highlight)   color = vec4(1.0, 0.3, 0.3, 1.0); 
 		else if (links[instance_id].type == 2) color = vec4(0.2, 0.4, 0.8, 1.0);
 		else if (links[instance_id].type == 1) color = vec4(0.8, 0.4, 0.6, 1.0);
+
+		color = vec4(1.0, 1.0, 1.0, 1.0);
+		int order = links_dynamic[instance_id].filled;
+		if (order > 0) {
+		//if (order == -1) {
+			//|color = vec4(0.5 + 0.5*cos(0.0003*2.0*order), 0.5 - 0.5*cos(0.0003*3.0*order), 0.5 + 0.5*cos(0.0003*5.0*order), 1.0);
+			color = vec4(0.0, 0.0, 0.0, 1.0);
+		}
+
+		vec2 p0 = position_world;
+		vec2 p1 = nodes[links[instance_id].back].P;
+		vec2 p2 = nodes[links[instance_id].front].P;
+
+		float c = dot(p2 - p1, p0 - p1)/length(p2 - p1)/length(p0 - p1);
+		
+		float x  = c*length(p0-p1);
+		x = length(p0-p1)/length(p2-p1);
+		x = dot(normalize(p2-p1), p0-p1)/length(p2-p1);
+
+
+		int found = -1;
+		for (int i = 0; i < links_dynamic[instance_id].num_bubbles; i++) {
+			if (x >= links_dynamic[instance_id].bubbles_start[i] && x <= links_dynamic[instance_id].bubbles_stop[i]) {
+				found = i;
+				break;
+			}
+		}
+
+		if (found != -1) {
+			color = vec4(252/255.0, 252/255.0, 252/255.0, 1.0);
+		} else {
+			color = vec4(0.0, 0.0, 0.0, 1.0);
+		}
+		//color = vec4(vec3(x), 1.0);
+
 	} else if (shade_mode == SHADE_CYLINDERS) {
 		// disk
 		float r = length(p) - 1.0;
-		float w = 1.5*fwidth(r);
+		float w = 1.5*fwidth(r)*0.0;
 		float s = smoothstep(w/2.0, -w/2.0, r);
 
 		// circle
@@ -86,6 +139,8 @@ void main() {
 		vec3 c1 = vec3(0.25, 0.5, 0.25);
 		vec3 c2 = vec3(0.5, 0.5, 0.5);
 		vec3 c3 = c1*(1.0 - s1) + c2*s1;
+		//c3 = vec3(1.0, 1.0, 1.0);
+		c3 = vec3(58/255.0*0.5,86/255.0*0.5,94/255.0*0.5);
 
 		// final color, blend with old image
 		color = vec4(c3, s);

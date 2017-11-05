@@ -6,7 +6,7 @@ import "shared:odin-gl/gl.odin";
 
 main :: proc() {
     // setup glfw
-    error_callback :: proc(error: i32, desc: ^u8) #cc_c {
+    error_callback :: proc"c"(error: i32, desc: ^u8) {
         fmt.printf("Error code %d:\n    %s\n", error, strings.to_odin_string(desc));
     }
     glfw.SetErrorCallback(error_callback);
@@ -19,7 +19,7 @@ main :: proc() {
     glfw.WindowHint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE);
 
     resx, resy := 1600.0, 900.0;
-    window := glfw.CreateWindow(i32(resx), i32(resy), "Odin Triangle Example Rendering", nil, nil);
+    window := glfw.create_window(i32(resx), i32(resy), "Odin Triangle Example Rendering", nil, nil);
     if window == nil do return;
 
     glfw.MakeContextCurrent(window);
