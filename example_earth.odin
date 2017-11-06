@@ -208,7 +208,7 @@ main :: proc() {
         gl.TextureSubImage3D(texture, 0, 0, 0, i32(i), width, height, 1, gl.RGB, gl.UNSIGNED_BYTE, &data[0]);
     }
 
-    gl.GenerateTextureMipmap(texture);
+    gl.GenerateTextureMipmap(texture); 
 
 
     when ODIN_OS == "windows" {
