@@ -107,7 +107,7 @@ main :: proc() {
 
 
     // Read cubemap textures
-    filenames := []string { // @NOTE: This order is wrong! The normal is flipped inside the shader to correct for this as a quick hack
+    filenames := [...]string { // @NOTE: This order is wrong! The normal is flipped inside the shader to correct for this as a quick hack
         "earth-cubemap/earth-cubemap-0.png",
         "earth-cubemap/earth-cubemap-1.png",
         "earth-cubemap/earth-cubemap-2.png",
@@ -193,20 +193,22 @@ main :: proc() {
 
     // create textures and upload data
     texture: u32;
-    gl.GenTextures(1, &texture);
-    gl.ActiveTexture(gl.TEXTURE0);
-    gl.BindTexture(gl.TEXTURE_CUBE_MAP, texture);
+    gl.CreateTextures(gl.TEXTURE_CUBE_MAP, 1, &texture);
+    gl.BindTextureUnit(0, texture);
 
-    gl.TexParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.TexParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.TexParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.TexParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.TexParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);  
+    gl.TextureParameteri(texture, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.TextureParameteri(texture, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.TextureParameteri(texture, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.TextureParameteri(texture, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.TextureParameteri(texture, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);  
 
+    gl.TextureStorage2D(texture, 9, gl.RGBA8, images[0].width, images[0].height);
     for _, i in images {
         using img := &images[i];
-        gl.TexImage2D(u32(gl.TEXTURE_CUBE_MAP_POSITIVE_X + i), 0, gl.RGB, width, height, 0, gl.RGB, gl.UNSIGNED_BYTE, &data[0]);
+        gl.TextureSubImage3D(texture, 0, 0, 0, i32(i), width, height, 1, gl.RGB, gl.UNSIGNED_BYTE, &data[0]);
     }
+
+    gl.GenerateTextureMipmap(texture);
 
 
     when ODIN_OS == "windows" {
@@ -236,13 +238,14 @@ main :: proc() {
 
         // setup shader program and uniforms
         gl.UseProgram(program);
-        gl.Uniform1f(uniform_infos["time"].location, f32(glfw.GetTime()));
-        gl.Uniform2f(uniform_infos["resolution"].location, f32(resx), f32(resy));
-        
+        gl.ProgramUniform1f(program, uniform_infos["time"].location, f32(glfw.GetTime()));
+        gl.ProgramUniform2f(program, uniform_infos["resolution"].location, f32(resx), f32(resy));
+
         // draw each model
+        gl.BindTextureUnit(0, texture);
         for model, i in models {
             gl.BindVertexArray(model.vao);
-            gl.Uniform3f(uniform_infos["offset"].location, 1.1*(-1.0 + 1.0*f32(i%3)), 0.5 - 1.0*f32(i/3), 0.0);
+            gl.ProgramUniform3f(program, uniform_infos["offset"].location, 1.1*(-1.0 + 1.0*f32(i%3)), 0.5 - 1.0*f32(i/3), 0.0);
             gl.DrawArrays(gl.TRIANGLES, 0, i32(model.num_vertices));
         }
         
