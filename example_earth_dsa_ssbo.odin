@@ -1,12 +1,17 @@
 /*
-    Odin OpenGL example: Subdivided spheres and cubemap texturing
+    Odin OpenGL example: Subdivided spheres and cubemap texturing using Direct State Access (DSA) functions
+                         and Shader Storage Buffer Objects (SSBO) to store and access the data on the GPU.
 
     A unit icosahedron is recursively subdivided by splitting each triangle into four triangles, 
     and reprojecting the vertices onto the unit sphere. 
 
     6 images of the earth are used to create a cubemap texture that is sampled based on the vertex normals.
 
-    Requires OpenGL 3.3 support.
+    This example is slightly different from example_earth_dsa.odin due to using SSBOs instead of VBOs. 
+    The main benefit of this is that you just dump your data onto a buffer, upload it, and read from it on 
+    the GPU as you see fit, e.g. using the built in vertex shader variables gl_VertexID and gl_InstanceID.
+    
+    Requires OpenGL 4.5 support. SSBOs require version 4.3, while DSA require 4.5.
 
     Dependencies: odin-glfw, odin-gl, stb_image
 */
@@ -21,39 +26,46 @@ import "shared:odin-gl/gl.odin";
 export "example_earth_common.odin"; // make_models and load_cubemap_images
 
 
-model_init_and_upload :: proc(using model: ^Model) {
-    gl.GenVertexArrays(1, &vao);
-    gl.BindVertexArray(vao);
+models_init_and_upload :: proc(models: []Model) -> u32 {
+    // put *all* the data into the same generic buffer array
+    total_vertices := 0;
+    for model in models do total_vertices += model.num_vertices;
 
-    gl.GenBuffers(1, &vbo);
-    gl.BindBuffer(gl.ARRAY_BUFFER, vbo);
-    gl.BufferData(gl.ARRAY_BUFFER, size_of(Vertex)*num_vertices, &vertices[0], gl.STATIC_DRAW);
+    data := make([]Vertex, total_vertices);
+    start := 0;
+    for model in models {
+        for vertex, i in model.vertices {
+            data[start+i] = vertex;
+        }
+        start += model.num_vertices;
+    }
 
-    gl.EnableVertexAttribArray(0);
-    gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, size_of(Vertex), cast(rawptr)offset_of(Vertex, position)); // NOTE: change the signature of glVertexAttribpointer to use uintptr
+    ssbo: u32;
+    gl.CreateBuffers(1, &ssbo);
+    gl.NamedBufferData(ssbo, total_vertices*size_of(Vertex), &data[0], gl.STATIC_DRAW);
 
-    gl.EnableVertexAttribArray(1);
-    gl.VertexAttribPointer(1, 3, gl.FLOAT, gl.FALSE, size_of(Vertex), cast(rawptr)offset_of(Vertex, normal)); 
+    return ssbo;
 }
 
 create_and_upload_cubemap :: proc(images: [6]Image) -> u32 {
+    // create textures and upload data
     texture: u32;
-    gl.GenTextures(1, &texture);
-    gl.ActiveTexture(gl.TEXTURE0);
-    gl.BindTexture(gl.TEXTURE_CUBE_MAP, texture);
+    gl.CreateTextures(gl.TEXTURE_CUBE_MAP, 1, &texture);
+    gl.BindTextureUnit(0, texture);
 
-    gl.TexParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-    gl.TexParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.TexParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.TexParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.TexParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);  
+    gl.TextureParameteri(texture, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.TextureParameteri(texture, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.TextureParameteri(texture, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.TextureParameteri(texture, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.TextureParameteri(texture, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);  
 
+    gl.TextureStorage2D(texture, 9, gl.RGBA8, images[0].width, images[0].height);
     for _, i in images {
         using img := &images[i];
-        gl.TexImage2D(u32(gl.TEXTURE_CUBE_MAP_POSITIVE_X + i), 0, gl.RGBA8, width, height, 0, gl.RGB, gl.UNSIGNED_BYTE, &data[0]);
+        gl.TextureSubImage3D(texture, 0, 0, 0, i32(i), width, height, 1, gl.RGB, gl.UNSIGNED_BYTE, &data[0]);
     }
 
-    gl.GenerateMipmap(gl.TEXTURE_CUBE_MAP); 
+    gl.GenerateTextureMipmap(texture); 
 
     return texture;
 }
@@ -70,12 +82,12 @@ main :: proc() {
 
     // create window
     glfw.WindowHint(glfw.SAMPLES, 4);
-    glfw.WindowHint(glfw.CONTEXT_VERSION_MAJOR, 3);
-    glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, 3);
+    glfw.WindowHint(glfw.CONTEXT_VERSION_MAJOR, 4);
+    glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, 5);
     glfw.WindowHint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE);
 
     resx, resy := 1920.0, 1000.0;
-    window := glfw.CreateWindow(i32(resx), i32(resy), "Sphere subdivision and Cubemap texturing (OpenGL 3.3)", nil, nil);
+    window := glfw.CreateWindow(i32(resx), i32(resy), "Sphere subdivision and Cubemap texturing, using Direct State Access (OpenGL 4.5)", nil, nil);
     if window == nil do return;
 
     // setup glfw state
@@ -86,10 +98,10 @@ main :: proc() {
     set_proc_address :: proc(p: rawptr, name: string) { 
         (cast(^rawptr)p)^ = rawptr(glfw.GetProcAddress(&name[0]));
     }
-    gl.load_up_to(3, 3, set_proc_address);
+    gl.load_up_to(4, 5, set_proc_address);
 
     // load shaders
-    program, shader_success := gl.load_shaders("shaders/shader_earth.vs", "shaders/shader_earth.fs");
+    program, shader_success := gl.load_shaders("shaders/shader_earth_dsa_ssbo.vs", "shaders/shader_earth_dsa.fs");
     defer gl.DeleteProgram(program);
     gl.UseProgram(program);
 
@@ -97,14 +109,17 @@ main :: proc() {
     uniform_infos := gl.get_uniforms_from_program(program);
     fmt.println(uniform_infos);
 
+    vao: u32;
+    gl.CreateVertexArrays(1, &vao);
+    gl.BindVertexArray(vao);
+
     // Create base and subdivided models, and upload to gpu
     models := make_models(10);
-    for _, i in models do model_init_and_upload(&models[i]);
+    ssbo := models_init_and_upload(models);
 
     // load and setup images, upload texture
     images := load_cubemap_images();
     texture := create_and_upload_cubemap(images);
-    gl.Uniform1f(uniform_infos["cubemap_sampler"].location, 0); // needs to explicitly tell the shader about the texture unit used
 
     // main loop
     gl.Enable(gl.DEPTH_TEST);
@@ -122,22 +137,24 @@ main :: proc() {
 
         // setup shader program, constant uniforms and texture
         gl.UseProgram(program);
-        gl.Uniform1f(uniform_infos["time"].location, f32(glfw.GetTime()));
-        gl.Uniform2f(uniform_infos["resolution"].location, f32(resx), f32(resy));
-        gl.BindTexture(gl.TEXTURE_CUBE_MAP, texture);
+        gl.ProgramUniform1f(program, uniform_infos["time"].location, f32(glfw.GetTime()));
+        gl.ProgramUniform2f(program, uniform_infos["resolution"].location, f32(resx), f32(resy));
+        gl.BindTextureUnit(0, texture);
 
         M0 := math.mat4_rotate(math.Vec3{1.0, 0.0, 0.0}, math.PI);
 
         // draw each model
+        start := 0;
         for model, i in models {
             offset := math.Vec3{1.1*(-1.25 + 0.62*f32(i%5)), 0.5 - 1.0*f32(i/5), 0.0};
             R := math.mat4_rotate(offset, f32(glfw.GetTime())*(0.5 + math.cos(math.mag(offset))));
             T := math.mat4_translate(offset);
             M := math.mul(T, math.mul(R, M0));
-            gl.UniformMatrix4fv(uniform_infos["M"].location, 1, gl.FALSE, &M[0][0]);
-            
-            gl.BindVertexArray(model.vao);
+            gl.ProgramUniformMatrix4fv(program, uniform_infos["M"].location, 1, gl.FALSE, &M[0][0]);
+
+            gl.BindBufferRange(gl.SHADER_STORAGE_BUFFER, 0, ssbo, start, model.num_vertices*size_of(Vertex));
             gl.DrawArrays(gl.TRIANGLES, 0, i32(model.num_vertices));
+            start += model.num_vertices*size_of(Vertex);
         }
         
         glfw.SwapBuffers(window);

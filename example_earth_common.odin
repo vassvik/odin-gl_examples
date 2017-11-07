@@ -33,7 +33,10 @@ icosahedron_vertices := [...]math.Vec3 {
 };
 
 Vertex :: struct #ordered {
-    position, normal: math.Vec3,
+    position: math.Vec3,
+    pad0: u8,
+    normal: math.Vec3,
+    pad1: u8,
 };
 
 Model :: struct {
@@ -54,7 +57,7 @@ make_models :: proc(N: int) -> []Model {
     models[0].num_triangles = models[0].num_vertices/3;
     models[0].vertices = make([]Vertex, models[0].num_vertices);
     for vertex, i in icosahedron_vertices {
-        models[0].vertices[i] = Vertex{math.norm0(vertex), math.norm0(vertex)};
+        models[0].vertices[i] = Vertex{math.norm0(vertex), 0, math.norm0(vertex), 0};
     }
 
     // subdivide 5 times, each subdivision takes a triangle and splits it into 4 pieces, 

@@ -19,6 +19,7 @@
 */
 
 import "core:fmt.odin";
+import "core:math.odin";
 import "core:strings.odin";
 
 import "shared:odin-glfw/glfw.odin";
@@ -107,10 +108,8 @@ main :: proc() {
     fmt.println(uniform_infos);
 
     // Create base and subdivided models, and upload to gpu
-    models := make_models(6);
-    for _, i in models {
-        model_init_and_upload(&models[i]);
-    }
+    models := make_models(10);
+    for _, i in models do model_init_and_upload(&models[i]);
 
     // load and setup images, upload texture
     images := load_cubemap_images();
@@ -130,15 +129,22 @@ main :: proc() {
         // clear screen
         gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-        // setup shader program and uniforms
+        // setup shader program, constant uniforms and texture
         gl.UseProgram(program);
         gl.ProgramUniform1f(program, uniform_infos["time"].location, f32(glfw.GetTime()));
         gl.ProgramUniform2f(program, uniform_infos["resolution"].location, f32(resx), f32(resy));
-
-        // draw each model
         gl.BindTextureUnit(0, texture);
+
+        M0 := math.mat4_rotate(math.Vec3{1.0, 0.0, 0.0}, math.PI);
+        
+        // draw each model
         for model, i in models {
-            gl.ProgramUniform3f(program, uniform_infos["offset"].location, 1.1*(-1.0 + 1.0*f32(i%3)), 0.5 - 1.0*f32(i/3), 0.0);
+            offset := math.Vec3{1.1*(-1.25 + 0.62*f32(i%5)), 0.5 - 1.0*f32(i/5), 0.0};
+            R := math.mat4_rotate(offset, f32(glfw.GetTime())*(0.5 + math.cos(math.mag(offset))));
+            T := math.mat4_translate(offset);
+            M := math.mul(T, math.mul(R, M0));
+            gl.ProgramUniformMatrix4fv(program, uniform_infos["M"].location, 1, gl.FALSE, &M[0][0]);
+
             gl.BindVertexArray(model.vao);
             gl.DrawArrays(gl.TRIANGLES, 0, i32(model.num_vertices));
         }
