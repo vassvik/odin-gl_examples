@@ -1,11 +1,11 @@
-#version 330 core
+#version 450 core
 
 in vec3 fragment_position;
 in vec3 fragment_normal;
 
 out vec4 color;
 
-uniform samplerCube cubemap_sampler;
+layout(location = 0) uniform samplerCube cubemap_sampler;
 uniform float time;
 
 void main() {
