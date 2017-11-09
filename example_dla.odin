@@ -7,7 +7,7 @@ import "shared:odin-gl/gl.odin";
 
 
 main :: proc() {
-    error_callback :: proc(error: i32, desc: ^u8) #cc_c {
+    error_callback :: proc "c" (error: i32, desc: ^u8) {
         fmt.printf("Error code %d:\n    %s\n", error, strings.to_odin_string(desc));
     }
     glfw.SetErrorCallback(error_callback);
@@ -84,7 +84,7 @@ main :: proc() {
             walker_y: int;
 
             r := int(4.0*rng());
-            match r {
+            switch r {
             case 0:
                 walker_y = y0;
                 walker_x = x0 + int(f64(x1-x0)*rng());

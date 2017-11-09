@@ -484,8 +484,7 @@ main :: proc() {
     u := math.Vec3{-cosp*cost, -sinp*cost, sint};                 // "up" vector, u = r x f
 
     // for mouse movement
-    mx_prev, my_prev: f64;
-    glfw.GetCursorPos(window, &mx_prev, &my_prev);
+    mx_prev, my_prev := glfw.GetCursorPos(window);
 
     // for timings
     t_prev := glfw.GetTime();
@@ -547,7 +546,7 @@ main :: proc() {
 
         gl.UseProgram(program);
         gl.Uniform1f(get_uniform_location(program, "time\x00"), f32(glfw.GetTime()));
-        gl.Uniform3f(get_uniform_location(program, "camera_pos\x00"), f32(p.x), f32(p.y), f32(p.z));
+        gl.Uniform3f(get_uniform_location(program, "camera_pos\x00"), f32(p[0]), f32(p[1]), f32(p[2]));
         gl.Uniform2f(get_uniform_location(program, "resolution\x00"), f32(resx), f32(resy));
 
         V := view(r, u, f, p);
@@ -605,8 +604,8 @@ main :: proc() {
         seed = 12345;
 
         //gl.PolygonMode(  gl.FRONT_AND_BACK, gl.FILL);
-        gl.Uniform3f(get_uniform_location(program, "r\x00"), r.x, r.y, r.z);
-        gl.Uniform3f(get_uniform_location(program, "u\x00"), u.x, u.y, u.z);
+        gl.Uniform3f(get_uniform_location(program, "r\x00"), r[0], r[1], r[2]);
+        gl.Uniform3f(get_uniform_location(program, "u\x00"), u[0], u[1], u[2]);
         gl.Uniform1i(get_uniform_location(program, "vertex_mode\x00"), 1);
         gl.Uniform1i(get_uniform_location(program, "draw_mode\x00"), 2);
         gl.Uniform1f(get_uniform_location(program, "near\x00"), near);
@@ -634,9 +633,9 @@ main :: proc() {
 // Hopefully this one gets added to core/math.odin eventually.
 view :: proc(r, u, f, p: math.Vec3) -> math.Mat4 { 
     return math.Mat4 { // HERE
-        {+r.x, +u.x, -f.x, 0.0},
-        {+r.y, +u.y, -f.y, 0.0},
-        {+r.z, +u.z, -f.z, 0.0},
+        {+r[0], +u[0], -f[0], 0.0},
+        {+r[1], +u[1], -f[1], 0.0},
+        {+r[2], +u[2], -f[2], 0.0},
         {-math.dot(r,p), -math.dot(u,p), math.dot(f,p), 1.0},
     };
 }
@@ -647,11 +646,11 @@ get_uniform_location :: proc(program: u32, str: string) -> i32 {
     return gl.GetUniformLocation(program, &str[0]);;
 }
 
-error_callback :: proc(error: i32, desc: ^u8) #cc_c {
+error_callback :: proc "c" (error: i32, desc: ^u8) {
     fmt.printf("Error code %d:\n    %s\n", error, strings.to_odin_string(desc));
 }
 
-init_glfw :: proc(resx, resy: i32, title: string) -> (^glfw.window, bool) {
+init_glfw :: proc(resx, resy: i32, title: string) -> (glfw.Window_Handle, bool) {
     glfw.SetErrorCallback(error_callback);
 
     if glfw.Init() == 0 do return nil, false;

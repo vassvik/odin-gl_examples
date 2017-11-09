@@ -69,11 +69,11 @@ main :: proc() {
 }
 
 
-error_callback :: proc(error: i32, desc: ^u8) #cc_c {
+error_callback :: proc "c" (error: i32, desc: ^u8) {
     fmt.printf("Error code %d:\n    %s\n", error, strings.to_odin_string(desc));
 }
 
-init_glfw :: proc(resx, resy: i32, title: string) -> (^glfw.window, bool) {
+init_glfw :: proc(resx, resy: i32, title: string) -> (glfw.Window_Handle, bool) {
     glfw.SetErrorCallback(error_callback);
 
     if glfw.Init() == 0 {

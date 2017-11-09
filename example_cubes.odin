@@ -1,3 +1,9 @@
+/*
+    OpenGL example: Rendering cubes arranged in a cubic lattice using instancing.
+    
+    Requires OpenGL 3.3 support.
+*/
+
 import "core:fmt.odin";
 import "core:math.odin";
 
