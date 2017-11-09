@@ -1,11 +1,10 @@
 import "core:fmt.odin";
-import "core:strings.odin";
 import "core:math.odin";
 
 import "shared:odin-glfw/glfw.odin";
 import "shared:odin-gl/gl.odin";
 
-export "common_3D.odin"
+export "common_3D.odin" // for generic 3D camera stuff
 
 cube_vertices := [...]math.Vec3 {
     {-0.5, -0.5, -0.5}, { 0.5, -0.5, -0.5}, { 0.5, -0.5,  0.5}, {-0.5, -0.5,  0.5},
