@@ -5,8 +5,20 @@ layout(location = 0) in vec3 vertex_position;
 uniform float time;
 
 out vec3 fragment_position;
+flat out int instance;
 
 void main() {
-    gl_Position = vec4(vertex_position, 1.0);
-    fragment_position = vertex_position;
+	instance = gl_InstanceID;
+    vec3 p = vertex_position;
+    fragment_position = p;
+
+    if (gl_InstanceID == 1) {
+    	p.z = -0.5;
+    	p.xy += 0.3;
+    }
+
+    gl_Position = vec4(p, 1.0);
+
+
+
 }

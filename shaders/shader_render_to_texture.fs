@@ -23,16 +23,16 @@ void main() {
 		ivec2 res = textureSize(tex, 0);
 		ivec2 p = ivec2(fragment_position.xy*res/* + 0.5*/);
 
-		vec4 middle   = texelFetch(tex, p + ivec2(0, 0), 0);
-		int top       = texelFetch(tex, p + ivec2(0, 1), 0) == middle ? 1 : 0;
-		int right     = texelFetch(tex, p + ivec2(1, 0), 0) == middle ? 1 : 0;
-		int top_right = texelFetch(tex, p + ivec2(1, 1), 0) == middle ? 1 : 0;
+		vec4 middle   = texelFetch(tex, ivec2(gl_FragCoord.xy) + ivec2(0, 0), 0);
+		int top       = texelFetch(tex, ivec2(gl_FragCoord.xy) + ivec2(0, 1), 0) == middle ? 1 : 0;
+		int right     = texelFetch(tex, ivec2(gl_FragCoord.xy) + ivec2(1, 0), 0) == middle ? 1 : 0;
+		int top_right = texelFetch(tex, ivec2(gl_FragCoord.xy) + ivec2(1, 1), 0) == middle ? 1 : 0;
 
 		int s = right*1 + top_right*2 + top*4;
 		s = !(s == 3 || s == 5 || s == 7) ? 0 : 1;
 
-		color = vec4(s, s, s, 1.0);
-		color = middle;
+		color = vec4(middle.xyz*s + vec3(0.0)*(1.0 - s), 1.0);
+		
 	} else {
 		ivec2 res = textureSize(tex, 0);
 
@@ -52,6 +52,7 @@ void main() {
 		float right_right   = texture(tex, p.xy + t*vec2(+2.0,  0.0)/res).x;
 		float bottom_bottom = texture(tex, p.xy + t*vec2( 0.0, -2.0)/res).x;
 		//color = vec4(1.0 - middle.xyz, 1.0);
+		
 		color = vec4(vec3(4.0*middle + left + right + top + bottom)/8.0, 1.0);
 	}
 }

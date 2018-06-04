@@ -1,12 +1,12 @@
 import "core:fmt.odin";
 import "core:os.odin";
-import "core:strings.odin";
+
 import "shared:odin-glfw/glfw.odin";
 import "shared:odin-gl/gl.odin";
 
 main :: proc() {
-    error_callback :: proc"c"(error: i32, desc: ^u8) {
-        fmt.printf("Error code %d:\n    %s\n", error, strings.to_odin_string(desc));
+    error_callback :: proc"c"(error: i32, desc: cstring) {
+        fmt.printf("Error code %d:\n    %s\n", error, desc);
     }
     glfw.SetErrorCallback(error_callback);
 
@@ -28,10 +28,7 @@ main :: proc() {
     glfw.SwapInterval(0);
 
     // load opengl function pointers
-    set_proc_address :: proc(p: rawptr, name: string) { 
-        (cast(^rawptr)p)^ = rawptr(glfw.GetProcAddress(&name[0]));
-    }
-    gl.load_up_to(3, 3, set_proc_address);
+    gl.load_up_to(3, 3, glfw.set_proc_address);
 
     // load shaders
     program, shader_success := gl.load_shaders("shaders/shader_texture.vs", "shaders/shader_texture.fs");
@@ -50,7 +47,7 @@ main :: proc() {
     // create 2D texture
     texture_width :: 4;
     texture_height :: 4;
-    texture_data := [...]u8 {
+    texture_data := [?]u8 {
         255, 152,   0, // orange
         156,  39, 176, // purple
           3, 169, 244, // light blue
@@ -84,24 +81,16 @@ main :: proc() {
     gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
     gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGB, texture_width, texture_height, 0, gl.RGB, gl.UNSIGNED_BYTE, &texture_data[0]);
 
-    // get the current time stamp of shaders
-    when ODIN_OS == "windows" {
-        last_vertex_time := os.last_write_time_by_name("shaders/shader_texture.vs");
-        last_fragment_time := os.last_write_time_by_name("shaders/shader_texture.fs");
-    }
     // main loop
     gl.ClearColor(1.0, 1.0, 1.0, 1.0);
-    for glfw.WindowShouldClose(window) == glfw.FALSE {
+    for !glfw.WindowShouldClose(window) {
         // show fps in window title
         glfw.calculate_frame_timings(window);
         
         // listen to inut
         glfw.PollEvents();
 
-        // update the shaders if they've changed (saved)
-        when ODIN_OS == "windows" {
-            program, last_vertex_time, last_fragment_time = gl.update_shader_if_changed("shaders/shader_texture.vs", "shaders/shader_texture.fs", program, last_vertex_time, last_fragment_time);
-        }
+        if glfw.GetKey(window, glfw.KEY_ESCAPE) do glfw.SetWindowShouldClose(window, true);
 
         // clear screen
         gl.Clear(gl.COLOR_BUFFER_BIT);

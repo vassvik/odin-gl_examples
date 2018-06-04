@@ -121,7 +121,7 @@ main :: proc() {
         last_fragment_time := os.last_write_time_by_name("shaders/shader_texture.fs");
     }
     gl.ClearColor(1.0, 1.0, 1.0, 1.0);
-    for glfw.WindowShouldClose(window) == glfw.FALSE {
+    for !glfw.WindowShouldClose(window) {
         glfw.calculate_frame_timings(window);
 
         glfw.PollEvents();

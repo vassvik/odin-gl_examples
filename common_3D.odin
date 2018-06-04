@@ -1,3 +1,9 @@
+/*
+    Common routines used in a typical 3D render
+
+    At the moment: a 1st person pivot camera
+*/
+
 import "core:math.odin"
 
 Camera :: struct {

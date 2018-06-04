@@ -1,5 +1,8 @@
 /*
     OpenGL example: Rendering cubes arranged in a cubic lattice using instancing.
+
+    A local time dependent scale transformation is applied in the vertex shader to 
+    each cube using gl_InstanceID.
     
     Requires OpenGL 3.3 support.
 */

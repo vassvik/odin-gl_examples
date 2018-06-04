@@ -1,4 +1,4 @@
-
+    
 import    "core:fmt.odin";
 import    "core:strings.odin";
 import    "core:math.odin";
@@ -227,9 +227,9 @@ subdivide_model :: proc(model_in: Model) -> Model {
         v2 := vertices[3*i + 1].position;
         v3 := vertices[3*i + 2].position;
 
-        a := math.mag(math.Vec3{v2.x - v1.x, v2.y - v1.y, v2.z - v1.z});
-        b := math.mag(math.Vec3{v3.x - v1.x, v3.y - v1.y, v3.z - v1.z});
-        c := math.mag(math.Vec3{v2.x - v3.x, v2.y - v3.y, v2.z - v3.z});
+        a := math.length(math.Vec3{v2.x - v1.x, v2.y - v1.y, v2.z - v1.z});
+        b := math.length(math.Vec3{v3.x - v1.x, v3.y - v1.y, v3.z - v1.z});
+        c := math.length(math.Vec3{v2.x - v3.x, v2.y - v3.y, v2.z - v3.z});
 
         u1 := math.Vec3{v2.x - v1.x, v2.y - v1.y, v2.z - v1.z};
         u2 := math.Vec3{v3.x - v1.x, v3.y - v1.y, v3.z - v1.z};
@@ -327,9 +327,9 @@ subdivide_base_model_platonic :: proc(verts: []Vec3, vertices_per_face: int) -> 
         v2 := vertices[3*i + 1].position;
         v3 := vertices[3*i + 2].position;
 
-        a := math.mag(math.Vec3{v2.x - v1.x, v2.y - v1.y, v2.z - v1.z});
-        b := math.mag(math.Vec3{v3.x - v1.x, v3.y - v1.y, v3.z - v1.z});
-        c := math.mag(math.Vec3{v2.x - v3.x, v2.y - v3.y, v2.z - v3.z});
+        a := math.length(math.Vec3{v2.x - v1.x, v2.y - v1.y, v2.z - v1.z});
+        b := math.length(math.Vec3{v3.x - v1.x, v3.y - v1.y, v3.z - v1.z});
+        c := math.length(math.Vec3{v2.x - v3.x, v2.y - v3.y, v2.z - v3.z});
         s := (a+b+c)/2.0;
         T := math.sqrt(s*(s-a)*(s-b)*(s-c));
        
@@ -388,9 +388,9 @@ create_base_model_platonic :: proc(verts: []Vec3, vertices_per_face: int) -> Mod
         v2 := vertices[3*i + 1].position;
         v3 := vertices[3*i + 2].position;
 
-        a := math.mag(math.Vec3{v2.x - v1.x, v2.y - v1.y, v2.z - v1.z});
-        b := math.mag(math.Vec3{v3.x - v1.x, v3.y - v1.y, v3.z - v1.z});
-        c := math.mag(math.Vec3{v2.x - v3.x, v2.y - v3.y, v2.z - v3.z});
+        a := math.length(math.Vec3{v2.x - v1.x, v2.y - v1.y, v2.z - v1.z});
+        b := math.length(math.Vec3{v3.x - v1.x, v3.y - v1.y, v3.z - v1.z});
+        c := math.length(math.Vec3{v2.x - v3.x, v2.y - v3.y, v2.z - v3.z});
         s := (a+b+c)/2.0;
         T := math.sqrt(s*(s-a)*(s-b)*(s-c));
        
@@ -541,6 +541,16 @@ main :: proc() {
         p += r*f32(glfw.GetKey(window, glfw.KEY_D) - glfw.GetKey(window, glfw.KEY_A))*dt;
         p += u*f32(glfw.GetKey(window, glfw.KEY_E) - glfw.GetKey(window, glfw.KEY_Q))*dt;
 
+        if glfw.GetKey(window, glfw.KEY_F5) == glfw.PRESS {
+            old_program := program;
+            new_program, success := gl.load_shaders("shaders/shader_solids.vs", "shaders/shader_solids.fs");
+            if success {
+                program = new_program;
+                gl.DeleteProgram(old_program);
+                fmt.println("Updated shaders");
+            }
+        }
+
         // Main drawing part
         gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
@@ -618,7 +628,7 @@ main :: proc() {
 
         //gl.Uniform3f(get_uniform_location(program, "sphere_pos\x00"), 100*cast(f32)rng(), 50*cast(f32)rng(), 4.0 + 50.0*cast(f32)rng());
         gl.Uniform3f(get_uniform_location(program, "sphere_pos\x00"), 0.0, 0.0, 0.0);
-        gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, i32(4), 100000);
+        gl.DrawArraysInstanced(gl.TRIANGLE_STRIP, 0, i32(4), 1000000);
         /*
         for i in 0..10000 {
         }
@@ -632,7 +642,7 @@ main :: proc() {
 // camera coordinate system, namely right (X), up (Y) and forward (-Z).
 // Hopefully this one gets added to core/math.odin eventually.
 view :: proc(r, u, f, p: math.Vec3) -> math.Mat4 { 
-    return math.Mat4 { // HERE
+    return math.Mat4 {
         {+r[0], +u[0], -f[0], 0.0},
         {+r[1], +u[1], -f[1], 0.0},
         {+r[2], +u[2], -f[2], 0.0},

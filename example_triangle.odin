@@ -6,8 +6,8 @@ import "shared:odin-gl/gl.odin";
 
 main :: proc() {
     // setup glfw
-    error_callback :: proc"c"(error: i32, desc: ^u8) {
-        fmt.printf("Error code %d:\n    %s\n", error, strings.to_odin_string(desc));
+    error_callback :: proc"c"(error: i32, desc: cstring) {
+        fmt.printf("Error code %d:\n    %s\n", error, desc);
     }
     glfw.SetErrorCallback(error_callback);
 
@@ -26,8 +26,8 @@ main :: proc() {
     glfw.SwapInterval(0);
 
     // setup opengl
-    set_proc_address :: proc(p: rawptr, name: string) { 
-        (cast(^rawptr)p)^ = rawptr(glfw.GetProcAddress(&name[0]));
+    set_proc_address :: proc(p: rawptr, name: cstring) { 
+        (cast(^rawptr)p)^ = rawptr(glfw.GetProcAddress(name));
     }
     gl.load_up_to(3, 3, set_proc_address);
 
@@ -43,7 +43,7 @@ main :: proc() {
     gl.BindVertexArray(vao);
 
     // setup vbo
-    vertex_data := [...]f32{
+    vertex_data := [?]f32{
         -0.3, -0.3,
          0.3, -0.3,
          0.0,  0.5,
@@ -61,7 +61,8 @@ main :: proc() {
     
     // main loop
     gl.ClearColor(1.0, 1.0, 1.0, 1.0);
-    for glfw.WindowShouldClose(window) == glfw.FALSE {
+    gl.Enable(gl.DEPTH_TEST);
+    for !glfw.WindowShouldClose(window) {
         // show fps in window title
         glfw.calculate_frame_timings(window);
         
@@ -69,7 +70,7 @@ main :: proc() {
         glfw.PollEvents();
 
         // clear screen
-        gl.Clear(gl.COLOR_BUFFER_BIT);
+        gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
         // setup shader program and uniforms
         gl.UseProgram(program);
@@ -77,7 +78,7 @@ main :: proc() {
         
         // draw stuff
         gl.BindVertexArray(vao);
-        gl.DrawArrays(gl.TRIANGLES, 0, 3);
+        gl.DrawArraysInstanced(gl.TRIANGLES, 0, 3, 2);
         
         glfw.SwapBuffers(window);
     }

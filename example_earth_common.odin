@@ -2,7 +2,7 @@ import "core:fmt.odin";
 import "core:math.odin";
 import "core:mem.odin";
 
-import stbi "shared:stb_image.odin";
+import stbi "shared:odin-stb/stb_image.odin";
 
 
 // Unit isocahedron vertex positions. 
@@ -32,7 +32,7 @@ icosahedron_vertices := [...]math.Vec3 {
     { 0,  -bi,  ai},   { ai,  0,   bi},   { bi, -ai,  0 },
 };
 
-Vertex :: struct #ordered {
+Vertex :: struct {
     position: math.Vec3,
     pad0: u8,
     normal: math.Vec3,

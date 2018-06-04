@@ -98,7 +98,7 @@ main :: proc() {
     fmt.println(uniform_infos);
 
     // Create base and subdivided models, and upload to gpu
-    models := make_models(10);
+    models := make_models(8);
     for _, i in models do model_init_and_upload(&models[i]);
 
     // load and setup images, upload texture
@@ -109,13 +109,13 @@ main :: proc() {
     // main loop
     gl.Enable(gl.DEPTH_TEST);
     gl.ClearColor(1.0, 1.0, 1.0, 1.0);
-    for glfw.WindowShouldClose(window) == glfw.FALSE {
+    for !glfw.WindowShouldClose(window) {
         // show fps in window title
         glfw.calculate_frame_timings(window);
 
         // listen to inut
         glfw.PollEvents();
-        if glfw.GetKey(window, glfw.KEY_ESCAPE) == glfw.PRESS do glfw.SetWindowShouldClose(window, glfw.TRUE);
+        if glfw.GetKey(window, glfw.KEY_ESCAPE) do glfw.SetWindowShouldClose(window, true);
 
         // clear screen
         gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -131,7 +131,7 @@ main :: proc() {
         // draw each model
         for model, i in models {
             offset := math.Vec3{1.1*(-1.25 + 0.62*f32(i%5)), 0.5 - 1.0*f32(i/5), 0.0};
-            R := math.mat4_rotate(offset, f32(glfw.GetTime())*(0.5 + math.cos(math.mag(offset))));
+            R := math.mat4_rotate(offset, f32(glfw.GetTime())*(0.5 + math.cos(math.length(offset))));
             T := math.mat4_translate(offset);
             M := math.mul(T, math.mul(R, M0));
             gl.UniformMatrix4fv(uniform_infos["M"].location, 1, gl.FALSE, &M[0][0]);
